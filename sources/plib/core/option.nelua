@@ -1,0 +1,336 @@
+
+require 'string'
+
+require 'meta/concepts'
+
+
+
+## local make_option
+## make_option = generalize(function(T)
+
+	local T = @#[T]#
+	local option = #[make_option]#
+
+
+	local optionT = @record {
+		ok: boolean,
+		data: T
+	}
+
+	## optionT.value.is_option = true
+	## optionT.value.subtype = T
+
+
+
+
+	function optionT.some(d: T): optionT
+		return (@optionT){ true, d }
+	end
+
+	function optionT.none(): optionT
+		return (@optionT){ false, (@T)() }
+	end
+
+
+
+
+	function optionT.is_some(self: optionT): boolean
+		return self.ok
+	end
+
+	function optionT.is_none(self: optionT): boolean
+		return not self.ok
+	end
+
+
+
+
+	function optionT.ref(self: *optionT) <polymorphic>
+		if self:is_some() then
+			return (@option(*T)).some(&self.data)
+		else
+			return (@option(*T)).none()
+		end
+	end
+
+
+
+
+	function optionT.expect(self: optionT, m: stringview): T
+		assert(self:is_some(), m)
+		return self.data
+	end
+
+	function optionT.unwrap(self: optionT): T
+		return self:expect("Expected Some")
+	end
+
+	function optionT.unwrap_or(self: optionT, v: T): T
+		if self:is_some() then
+			return self.data
+		else
+			return v
+		end
+	end
+
+	function optionT.unwrap_or_else(self: optionT, f: functor(T)): T
+		if self:is_some() then
+			return self.data
+		else
+			return f()
+		end
+	end
+
+
+
+	function optionT.map(self: optionT, f: functor(auto, T))
+		local U = #[f.type.rettypes[1]]#
+		if self:is_some() then
+			return (@option(U)).some(f(self.data))
+		else
+			return (@option(U)).none()
+		end
+	end
+
+	function optionT.map_or(self: optionT, v: auto, f: functor(auto, T))
+		##[[
+			static_assert(v.type == f.type.rettypes[1], 
+				"The type of 'v' (" .. tostring(v.type) .. 
+				") and the return type of 'f' (" .. tostring(f.type.rettypes[1]) .. 
+				") aren't the same.")
+		]]
+		local U = #[v.type]#
+
+		if self:is_some() then
+			return f(self.data)
+		else
+			return v
+		end
+	end
+
+	function optionT.map_or_else(self: optionT, fd: functor(auto), f: functor(auto, T))
+		##[[
+			static_assert(fd.type.rettypes[1] == f.type.rettypes[1],
+				"The return types of 'fd' (" .. tostring(fd.type.rettypes[1]) ..
+				") and 'f' (" .. tostring(fd.type.rettypes[1]) .. 
+				") aren't the same.")
+		]]
+		local U = #[fd.type.rettypes[1]]#
+
+		if self:is_some() then
+			return f(self.data)
+		else
+			return fd()
+		end
+	end
+
+
+
+	function optionT.and_(self: optionT, o: auto)
+		##[[
+			static_assert(o.type.is_option, "'o' isn't an option.")
+		]]
+		local U = #[o.type.subtype]#
+
+		if self:is_some() then
+			return o
+		else
+			return (@option(U)).none()
+		end
+	end
+
+	function optionT.and_then(self: optionT, f: functor(auto, T))
+		##[[
+			static_assert(f.type.rettypes[1].is_option, "'f' doesn't return an " ..
+				" option (want: function(" .. tostring(T) .. "): option(U), " .. 
+				"has: " .. tostring(f.type) .. ").")
+		]]
+		local U = #[f.type.rettypes[1].subtype]#
+
+		if self:is_some() then
+			return f(self.data)
+		else
+			return (@option(U)).none()
+		end
+	end
+
+
+
+	function optionT.or_(self: optionT, o: optionT)
+		if self:is_some() then
+			return self
+		else
+			return o
+		end
+	end
+
+	function optionT.or_else(self: optionT, f: functor(optionT))
+		if self:is_some() then
+			return self
+		else
+			return f()
+		end
+	end
+
+	function optionT.xor(self: optionT, o: optionT)
+		if self:is_some() and o:is_none() then
+			return self
+		elseif self:is_none() and o:is_none() then
+			return o
+		else
+			return optionT.none()
+		end
+	end
+
+	function optionT.get_or_insert(self: *optionT, v: T): *T
+		if self:is_some() then
+			return &self.data
+		else
+			self.ok = true
+			self.data = v
+			return &self.data
+		end
+	end
+
+	function optionT.get_or_insert_with(self: *optionT, f: functor(T)): *T
+		if self:is_some() then
+			return &self.data
+		else
+			self.ok = true
+			self.data = f()
+			return &self.data
+		end
+	end
+
+	function optionT.take(self: *optionT): optionT
+		if self:is_some() then
+			local d = self.data
+			self.data = (@T)()
+			self.ok = false
+			return optionT.some(d)
+		else
+			return optionT.none()
+		end
+	end
+
+	function optionT.replace(self: *optionT, v: T): optionT
+		if self:is_some() then
+			local old = optionT.some(self.data)
+			self.data = v
+			return old
+		else
+			self.data = v
+			return optionT.none()
+		end
+	end
+
+
+
+	## return optionT
+## end)
+
+
+global option = #[make_option]#
+
+global function Some(v: auto)
+	local T = #[v.type]#
+	return (@option(T)).some(v)
+end
+
+global function None(T: type)
+	return (@option(T)).none()
+end
+
+
+
+
+## if TEST then
+
+	print("Testing core/option...")
+
+	local x = Some(42_i)
+	local y = None(integer)
+
+
+	assert(x:is_some())
+	assert(y:is_none())
+
+	assert(x:expect("work") == 42)
+	-- y:expect("should not work") -- OK
+
+	assert(x:unwrap() == 42)
+	-- y:unwrap() -- based on option(T):expect
+
+	assert(x:unwrap_or(24) == 42)
+	assert(y:unwrap_or(24) == 24)
+
+
+	local function f0(): integer
+		return 24
+	end
+
+	assert(x:unwrap_or_else(f0) == 42)
+	assert(y:unwrap_or_else(f0) == 24)
+
+
+	local function f1(v: integer): number
+		return (@number)(v * 2)
+	end
+
+	assert(x:map(f1):unwrap() == 84)
+	assert(y:map(f1):is_none())
+
+
+	local function f2(v: integer): integer
+		return v * 2
+	end
+
+	assert(x:map_or(24, f2) == 84)
+	assert(y:map_or(24, f2) == 24)
+
+
+	local function f3_0(): integer
+		return 24
+	end
+
+	local function f3_1(v: integer): integer
+		return v - 2
+	end
+
+	assert(x:map_or_else(f3_0, f3_1) == 40)
+	assert(y:map_or_else(f3_0, f3_1) == 24)
+
+	assert(x:and_(y):is_none())
+
+
+	local function f4(v: integer): option(number)
+		return Some(v*10_n)
+	end
+
+	assert(x:and_then(f4):unwrap() == 420)
+	assert(y:and_then(f4):is_none())
+
+
+	assert(x:or_(y):unwrap() == 42)
+
+
+	local function f5(): option(integer)
+		return Some(10_i)
+	end
+
+	assert(x:or_else(f5):unwrap() == 42)
+	assert(y:or_else(f5):unwrap() == 10)
+
+
+
+	assert($x:get_or_insert(10) == 42)
+	assert($y:get_or_insert(10) == 10)
+
+	assert(y:take():unwrap() == 10)
+	assert(y:take():is_none())
+
+	assert(x:replace(10):unwrap() == 42)
+	assert(x:unwrap() == 10)
+
+
+## end
