@@ -1,0 +1,34 @@
+
+--[============================================================================[
+-- C LOW LEVEL
+--
+-- This module contains low level utility function.
+--]============================================================================]
+
+
+
+
+--------------------------------------------------------------------------------
+--- Casts one `a` to the type `T` and preserves raw byte data.
+---
+--- \param T : The type to cast to.
+--- \param a : The value to cast.
+--- \return The casted value.
+---
+global function union_cast(T: type, a: auto) <inline,nosideeffect>
+	local b: T <noinit>
+
+	## if DEBUG_META then print("T:", T.value, T.value.size, "a:", a.type, a.type.size) end
+	## static_assert(T.value.size <= a.type.size, string.format("Incompatible size in union_cast (T = %s (%d), a = %s (%d))", T.value, T.value.size, a.type, a.type.size))
+	##[[
+
+	cemit(function(emitter) 
+		emitter:add_indent_ln('union{ ', a.type, ' a; ', b.type, ' b; } u = { .a = a };')
+		emitter:add_indent_ln('b = u.b;')
+	end)
+
+	]]
+
+	return b
+end
+

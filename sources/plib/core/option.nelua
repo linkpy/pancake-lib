@@ -1,73 +1,61 @@
 
-require 'string'
-
-require 'meta/concepts'
-
+require 'plib/core/sumtype'
+require 'plib/meta/concepts'
+require 'plib/meta/unit_test'
 
 
 ## local make_option
 ## make_option = generalize(function(T)
 
-	local T = @#[T]#
-	local option = #[make_option]#
+	##[[
+	local function rename_method(t, m, nm)
+		if not t.metafields[m] then
+			return
+		end
+
+		t.metafields[nm] = t.metafields[m]
+		t.metafields[m] = nil
+	end
+
+	local function remove_method(t, m)
+		static_assert(t.metafields[m], string.format("Method '%s' not found.", m))
+		t.metafields[m] = nil
+	end
 
 
-	local optionT = @record {
-		ok: boolean,
-		data: T
-	}
+	]]
+
+	local T = #[T]#
+	local option = #[make_option]# 
+
+	local optionT = @sumtype(#['option(' .. tostring(T) .. ")"]#, record {
+		some: T,
+		none: niltype
+	})
 
 	## optionT.value.is_option = true
 	## optionT.value.subtype = T
 
+	## rename_method(optionT.value, 'unwrap_some', 'unwrap')
 
 
 
-	function optionT.some(d: T): optionT
-		return (@optionT){ true, d }
-	end
-
-	function optionT.none(): optionT
-		return (@optionT){ false, (@T)() }
-	end
-
-
-
-
-	function optionT.is_some(self: optionT): boolean
-		return self.ok
-	end
-
-	function optionT.is_none(self: optionT): boolean
-		return not self.ok
-	end
-
-
-
-
-	function optionT.ref(self: *optionT) <polymorphic>
+	function optionT.as_ptr(self: *optionT) <polymorphic>
 		if self:is_some() then
-			return (@option(*T)).some(&self.data)
+			return (@option(*T)).some(self:_unwrap_some_ptr())
 		else
 			return (@option(*T)).none()
 		end
 	end
 
-
-
-
 	function optionT.expect(self: optionT, m: stringview): T
 		assert(self:is_some(), m)
-		return self.data
-	end
-
-	function optionT.unwrap(self: optionT): T
-		return self:expect("Expected Some")
+		return self:unwrap()
 	end
 
 	function optionT.unwrap_or(self: optionT, v: T): T
 		if self:is_some() then
-			return self.data
+			return self:unwrap()
 		else
 			return v
 		end
@@ -75,25 +63,23 @@ require 'meta/concepts'
 
 	function optionT.unwrap_or_else(self: optionT, f: functor(T)): T
 		if self:is_some() then
-			return self.data
+			return self:unwrap()
 		else
 			return f()
 		end
 	end
 
-
-
 	function optionT.map(self: optionT, f: functor(auto, T))
 		local U = #[f.type.rettypes[1]]#
 		if self:is_some() then
-			return (@option(U)).some(f(self.data))
+			return (@option(U)).some(f(self:unwrap()))
 		else
 			return (@option(U)).none()
 		end
 	end
 
 	function optionT.map_or(self: optionT, v: auto, f: functor(auto, T))
-		##[[
+		##[[	
 			static_assert(v.type == f.type.rettypes[1], 
 				"The type of 'v' (" .. tostring(v.type) .. 
 				") and the return type of 'f' (" .. tostring(f.type.rettypes[1]) .. 
@@ -102,7 +88,7 @@ require 'meta/concepts'
 		local U = #[v.type]#
 
 		if self:is_some() then
-			return f(self.data)
+			return f(self:unwrap())
 		else
 			return v
 		end
@@ -118,13 +104,11 @@ require 'meta/concepts'
 		local U = #[fd.type.rettypes[1]]#
 
 		if self:is_some() then
-			return f(self.data)
+			return f(self:unwrap())
 		else
 			return fd()
 		end
 	end
-
-
 
 	function optionT.and_(self: optionT, o: auto)
 		##[[
@@ -148,7 +132,7 @@ require 'meta/concepts'
 		local U = #[f.type.rettypes[1].subtype]#
 
 		if self:is_some() then
-			return f(self.data)
+			return f(self:unwrap())
 		else
 			return (@option(U)).none()
 		end
@@ -184,29 +168,26 @@ require 'meta/concepts'
 
 	function optionT.get_or_insert(self: *optionT, v: T): *T
 		if self:is_some() then
-			return &self.data
+			return self:unwrap_some_ptr()
 		else
-			self.ok = true
-			self.data = v
-			return &self.data
+			self:morph_into_some(v)
+			return self:unwrap_some_ptr()
 		end
 	end
 
 	function optionT.get_or_insert_with(self: *optionT, f: functor(T)): *T
 		if self:is_some() then
-			return &self.data
+			return self:unwrap_some_ptr()
 		else
-			self.ok = true
-			self.data = f()
-			return &self.data
+			self:morph_into_some(v)
+			return self:unwrap_some_ptr()
 		end
 	end
 
 	function optionT.take(self: *optionT): optionT
 		if self:is_some() then
-			local d = self.data
-			self.data = (@T)()
-			self.ok = false
+			local d = self:unwrap()
+			self:morph_into_none()
 			return optionT.some(d)
 		else
 			return optionT.none()
@@ -215,15 +196,14 @@ require 'meta/concepts'
 
 	function optionT.replace(self: *optionT, v: T): optionT
 		if self:is_some() then
-			local old = optionT.some(self.data)
-			self.data = v
+			local old = optionT.some(self:unwrap())
+			self:morph_into_some(v)
 			return old
 		else
-			self.data = v
+			self:morph_into_some(v)
 			return optionT.none()
 		end
 	end
-
 
 
 	## return optionT
@@ -243,94 +223,140 @@ end
 
 
 
-
-## if TEST then
-
-	print("Testing core/option...")
+## test_suite('core/option', function()
 
 	local x = Some(42_i)
 	local y = None(integer)
 
+	## test('is_some/is_none', function()
 
-	assert(x:is_some())
-	assert(y:is_none())
+		assert(x:is_some())
+		assert(y:is_none())
 
-	assert(x:expect("work") == 42)
-	-- y:expect("should not work") -- OK
+	## end)
 
-	assert(x:unwrap() == 42)
-	-- y:unwrap() -- based on option(T):expect
+	## test('expect', function()
 
-	assert(x:unwrap_or(24) == 42)
-	assert(y:unwrap_or(24) == 24)
+		assert(x:expect("work") == 42)
+		--assert(y:expect("panic")) -- crashes, OK
 
+	## end)
 
-	local function f0(): integer
-		return 24
-	end
+	## test('unwrap', function()
 
-	assert(x:unwrap_or_else(f0) == 42)
-	assert(y:unwrap_or_else(f0) == 24)
+		assert(x:unwrap() == 42)
+		--assert(y:unwrap()) -- crashes, OK
 
+	## end)
 
-	local function f1(v: integer): number
-		return (@number)(v * 2)
-	end
+	## test('unwrap_or', function()
 
-	assert(x:map(f1):unwrap() == 84)
-	assert(y:map(f1):is_none())
+		assert(x:unwrap_or(24) == 42)
+		assert(y:unwrap_or(24) == 24)
 
+	## end)
 
-	local function f2(v: integer): integer
-		return v * 2
-	end
+	## test('unwrap_or_else', function()
 
-	assert(x:map_or(24, f2) == 84)
-	assert(y:map_or(24, f2) == 24)
+		local function f0(): integer
+			return 24
+		end
 
+		assert(x:unwrap_or_else(f0) == 42)
+		assert(y:unwrap_or_else(f0) == 24)
 
-	local function f3_0(): integer
-		return 24
-	end
+	## end)
 
-	local function f3_1(v: integer): integer
-		return v - 2
-	end
+	## test('map', function()
 
-	assert(x:map_or_else(f3_0, f3_1) == 40)
-	assert(y:map_or_else(f3_0, f3_1) == 24)
+		local function f1(v: integer): number
+			return (@number)(v * 2)
+		end
 
-	assert(x:and_(y):is_none())
+		assert(x:map(f1):unwrap() == 84)
+		assert(y:map(f1):is_none())
 
+	## end)
 
-	local function f4(v: integer): option(number)
-		return Some(v*10_n)
-	end
+	## test('map_or', function()
 
-	assert(x:and_then(f4):unwrap() == 420)
-	assert(y:and_then(f4):is_none())
+		local function f2(v: integer): integer
+			return v * 2
+		end
 
+		assert(x:map_or(24, f2) == 84)
+		assert(y:map_or(24, f2) == 24)
 
-	assert(x:or_(y):unwrap() == 42)
+	## end)
 
+	## test('map_or_else', function()
 
-	local function f5(): option(integer)
-		return Some(10_i)
-	end
+		local function f3_0(): integer
+			return 24
+		end
 
-	assert(x:or_else(f5):unwrap() == 42)
-	assert(y:or_else(f5):unwrap() == 10)
+		local function f3_1(v: integer): integer
+			return v - 2
+		end
 
+		assert(x:map_or_else(f3_0, f3_1) == 40)
+		assert(y:map_or_else(f3_0, f3_1) == 24)
 
+	## end)
 
-	assert($x:get_or_insert(10) == 42)
-	assert($y:get_or_insert(10) == 10)
+	## test('and_', function()
 
-	assert(y:take():unwrap() == 10)
-	assert(y:take():is_none())
+		assert(x:and_(y):is_none())
 
-	assert(x:replace(10):unwrap() == 42)
-	assert(x:unwrap() == 10)
+	## end)
 
+	## test('and_then', function()
 
-## end
+		local function f4(v: integer): option(number)
+			return Some(v*10_n)
+		end
+
+		assert(x:and_then(f4):unwrap() == 420)
+		assert(y:and_then(f4):is_none())
+
+	## end)
+
+	## test('or_', function()
+
+		assert(x:or_(y):unwrap() == 42)
+
+	## end)
+
+	## test('or_else', function()
+
+		local function f5(): option(integer)
+			return Some(10_i)
+		end
+
+		assert(x:or_else(f5):unwrap() == 42)
+		assert(y:or_else(f5):unwrap() == 10)
+
+	## end)
+
+	## test('get_or_insert', function()
+
+		assert($x:get_or_insert(10) == 42)
+		assert($y:get_or_insert(10) == 10)
+
+	## end)
+
+	## test('take', function()
+
+		assert(y:take():unwrap() == 10)
+		assert(y:take():is_none())
+
+	## end)
+
+	## test('replace', function()
+
+		assert(x:replace(10):unwrap() == 42)
+		assert(x:unwrap() == 10)
+
+	## end)
+
+## end)

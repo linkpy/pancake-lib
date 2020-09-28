@@ -1,0 +1,206 @@
+
+require 'plib/core/cll'
+
+
+## local make_sumtype = generalize(function (nick, rec)
+
+
+	##[[
+
+	local entries = {}
+
+	for _, field in ipairs(rec.fields) do
+		entries[field.name] = field.type
+	end
+
+
+
+	local function find_max_entry_size(entries)
+		local max_size = 0
+		for _, entry in pairs(entries) do
+			max_size = math.max(entry.size, max_size)
+		end
+		return max_size
+	end
+
+	local function make_tag_enum(entries)
+		local values = {}
+		local i = 0
+		for ename, entry in pairs(entries) do
+			table.insert(values, {
+				name = ename,
+				value = i
+			})
+			i = i + 1
+		end
+
+		static_assert(#values > 0, "A sumtype must have at least 1 variant.")
+
+		return types.EnumType(primtypes.integer, values)
+	end
+
+	local function find_enum_value(enumtype, name)
+		for _, value in ipairs(enumtype.fields) do
+			if value.name == name then
+				return value.value
+			end
+		end
+
+		static_assert(false, "The given enum doesn't have a value named " .. name)
+	end
+
+	local function make_record(fields, tagenum, size)
+		local recordtype = types.RecordType()
+
+		recordtype:add_field('__tag', tagenum.subtype)
+
+		for _, field in ipairs(fields) do
+			recordtype:add_field(field.name, field.type)
+		end
+
+		
+		local rem_size = size - (recordtype.size - tagenum.subtype.size)
+
+		static_assert(rem_size >= 0, "The structure as a bigger size than wanted (too much fields given ?)")
+
+		if rem_size > 0 then
+			recordtype:add_field('__storage', types.ArrayType(primtypes.uint8, rem_size))
+		end
+
+		return recordtype
+	end
+
+	local function make_variant_record(entry, tagenum, size)
+		local fields = {}
+		if entry.is_record then
+			for _, field in ipairs(entry.fields) do
+				table.insert(fields, { name = field.name, type = field.type })
+			end
+		elseif entry.size > 0 then
+			table.insert(fields, { name = "data", type = entry })
+		end
+
+		return make_record(fields, tagenum, size)
+	end
+
+	local function make_record_copying(tag, inp, inptype)
+		local pairs = {}
+
+		table.insert(pairs, aster.Pair{ '__tag', aster.Number { 'dec', tostring(tag) } })
+
+		for _, field in ipairs(inptype.fields) do
+			table.insert(pairs, aster.Pair{ 
+				field.name, 
+				aster.DotIndex{
+					field.name,
+					aster.Id( { inp.name } )
+				}
+			})
+		end
+
+		return aster.Table{ pairs }
+	end
+
+	local size = find_max_entry_size(entries)
+	local variants = {}
+	local nickname = "sumtype(" .. nick .. ")"
+
+	]]
+
+	local sumtypeT_tag <nickname #[nickname .. "#TAG"]#> = #[make_tag_enum(entries)]#
+	local sumtypeT <nickname #[nickname]#> = #[make_record({}, sumtypeT_tag.value, size)]#
+
+	## for name, entry in pairs(entries) do
+		## variants[name] = make_variant_record(entry, sumtypeT_tag.value, size)
+		## local variant = variants[name]
+		## local enumvalue = find_enum_value(sumtypeT_tag.value, name)
+		local variantT <nickname #[nickname .. "#" .. name]#> = #[variant]#
+		local entryT = #[entry]#
+
+
+		function sumtypeT.#|'is_' .. name|#(self: sumtypeT): boolean
+			return self.__tag == #[enumvalue]#
+		end
+
+
+		## if entry.is_record then
+			## if DEBUG_META then print("record variant:", variant, variant.size) end
+
+			function sumtypeT.#|name|#(v: entryT): sumtypeT
+				return union_cast(sumtypeT, (@variantT)(#[make_record_copying(enumvalue, v, entry)]#))
+			end
+
+			function sumtypeT.#|'unwrap_' .. name|#(self: sumtypeT): entryT
+				assert(self:#|'is_' .. name|#(), "Unwrap failed : sumtype is not of the right variant")
+				local v = union_cast(variantT, self)
+				local r: entryT <noinit>
+				## for _, field in ipairs(entry.fields) do
+					r.#|field.name|# = v.#|field.name|#
+				## end
+				return r
+			end
+
+			function sumtypeT:#|'unwrap_' .. name .. "_ptr"|#(): *entryT
+				assert(self:#|'is_' .. name|#(), "Unwrap pointer failed : sumtype is not of the right variant")
+				return (@*entryT)((@usize)(self) + #[sumtypeT_tag.value.subtype.size]#)
+			end
+
+			function sumtypeT:#|'morph_into_' .. name|#(v: entryT): *sumtypeT
+				local ptr = (@*variantT)(self)
+				ptr.__tag = #[enumvalue]#
+				## for _, field in ipairs(entry.fields) do
+					ptr.#|field.name|# = v.#|field.name|#
+				## end
+				return self
+			end
+
+		## elseif entry.size > 0 then
+			## if DEBUG_META then print("value variant:", variant, variant.size) end
+
+			function sumtypeT.#|name|#(v: entryT): sumtypeT
+				return union_cast(sumtypeT, (@variantT)({
+					__tag = #[enumvalue]#,
+					data = v
+				}))
+			end
+
+			function sumtypeT.#|'unwrap_' .. name|#(self: sumtypeT): entryT
+				assert(self:#|'is_' .. name|#(), "Unwrap failed : sumtype is not of the right variant")
+				return union_cast(variantT, self).data
+			end
+
+			function sumtypeT:#|'unwrap_' .. name .. '_ptr'|#(): *entryT
+				assert(self:#|'is_' .. name|#(), "Unwrap pointer failed : sumtype is not of the right variant")
+				local ptr = (@*variantT)(self)
+				return &ptr.data
+			end
+
+			function sumtypeT:#|'morph_into_' .. name|#(v: entryT): *sumtypeT
+				local ptr = (@*variantT)(self)
+				ptr.__tag = #[enumvalue]#
+				ptr.data = v
+				return self
+			end
+
+		## else
+			## if DEBUG_META then print("empty variant:", variant, variant.size) end
+
+			function sumtypeT.#|name|#(): sumtypeT
+				return union_cast(sumtypeT, (@variantT)({
+					__tag = #[enumvalue]#
+				}))
+			end
+
+			function sumtypeT:#|'morph_into_' .. name|#(): *sumtypeT
+				self.__tag = #[enumvalue]#
+				return self
+			end
+
+		## end
+
+	## end	
+
+	## return sumtypeT
+## end)
+
+global sumtype = #[make_sumtype]#

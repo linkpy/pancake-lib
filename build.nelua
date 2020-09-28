@@ -1,0 +1,14 @@
+
+##[[
+
+ppm = require 'packages/pancake-pm'
+ppm.init(_ENV)
+ppm.package('linkpy/pancake-pm')
+
+
+static_assert(TEST or PPM_SUB_PACKAGE, "This is a library")
+
+]]
+
+
+require 'plib/core/option'

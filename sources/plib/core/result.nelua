@@ -1,0 +1,20 @@
+
+require 'plib/meta/concepts'
+
+## local make_result
+## make_result = generalize(function(T, E)
+
+	local T = #[T]#
+	local E = #[E]#
+
+	local resultT = @record {
+		ok: boolean,
+		data: T,
+		err: E
+	}
+
+	
+
+
+	## return resultT
+## end)

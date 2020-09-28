@@ -1,0 +1,17 @@
+
+
+
+## function test_suite(name, block)
+	## 	if TEST then
+		print(#['==== ' .. name]#)
+		## block()
+	## end
+## end
+
+## function test(desc, block)
+	print(#['   - ' .. desc]#)
+##	block()
+## end
+
+
+

@@ -1,0 +1,97 @@
+
+--[============================================================================[
+---	# FUNCTOR
+--- 
+--- A functor is a concept for a function returning R arguments and taking
+--- Args argument.
+---
+--- `functor` is for 1 return value, and `functor2` is for two.
+--]============================================================================]
+
+##[[ 
+local function make_functorN(R, Args)
+	return concept(function(attr)
+		if not attr.type.is_function then
+			return false, 
+				string.format("the type isn't a function (got: %s)", attr.type)
+		end
+
+
+		if #attr.type.rettypes ~= #R then
+			return false, 
+				string.format("the type doesn't have the right number of return values" ..
+					"(got: %d, want: %d)", #attr.type.retypes, #R)
+		end
+
+		for i, t in ipairs(R) do
+			if attr.type.rettypes[i] ~= t and not t.is_auto then
+				return false, 
+					string.format("the return type #%d does not match (got: %s, want: %s)", 
+						i, attr.type.rettypes[i], t)
+			end
+		end
+
+
+		if #attr.type.argtypes ~= #Args then
+			return false, 
+				string.format("the type doesn't have the right number of arguments" ..
+					"(got: %d, want: %d)", #attr.type.argtypes, #Args)
+		end
+
+		for i, t in ipairs(Args) do
+			if attr.type.argtypes[i] ~= t and not t.is_auto then
+				return false, 
+					string.format("the argument type #%d does not match (got: %s, want: %s)", 
+						i, attr.type.argtpes[i], t)
+			end
+		end
+
+
+		return true
+	end)
+end
+]]
+
+
+global functor =  #[generalize(function(R, ...) return make_functorN({R}, {...}) end)]#
+global functor2 = #[generalize(function(R1, R2, ...) return make_functorN({R1, R2}, {...}) end)]#
+
+
+
+--[============================================================================[
+---	ACTION
+---
+--- An action is a function returning nothing and taking in a set of arguments.
+--]============================================================================]
+
+##[[
+local make_action = generalize(function(...)
+	local Args = arg
+
+	return concept(function(attr)
+		if not attr.type.is_function then
+			return false
+		end
+
+
+		if #attr.type.rettypes ~= 0 then
+			return false
+		end
+
+
+		if #attr.type.argtypes ~= #Args then
+			return false
+		end
+
+		for i, t in ipairs(Args) do
+			if attr.type.argtypes ~= t then
+				return false
+			end
+		end
+
+		return true
+	end)
+end)
+]]
+
+global action = #[make_action]#
