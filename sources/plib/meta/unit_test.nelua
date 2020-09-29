@@ -3,10 +3,12 @@
 
 	##[[ 
 
+	local cols = require('nelua.utils.console').colors
+
 	local passert_dummy_concept = concept(function(x)
 		local t = types.NiltypeType('niltype')
 		t.is_equal = function() return false end
-		t.text = context:get_parent_node():format_message('error', 'test assert failed')
+		t.text = cols.red .. "x=== FAIL ===x" .. cols.reset
 		return t
 	end)
 

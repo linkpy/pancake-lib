@@ -1,4 +1,6 @@
 
+## TEST = true
+
 require 'plib/core/cll'
 require 'plib/core/sumtype'
 require 'plib/core/option'

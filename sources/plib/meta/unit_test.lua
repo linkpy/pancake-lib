@@ -1,56 +1,55 @@
-config.check_ast_shape = true
+local cols = require('nelua.utils.console').colors
 
-local suite_name = ""
-local test_name = ""
-local suite_count = 0
+return function(e)
+	local aster = e.aster
+	local inject_astnode = e.inject_astnode
 
-local function inject_io_write(content)
-	inject_astnode(
-		aster.CallMethod{
-			aster.String{"write"},
-			{aster.String{content}},
-			aster.DotIndex{
-				aster.String{"stdout"},
-				aster.Id{ "io" }
+	local suite_col = cols.blue .. cols.bright
+	local pipe_col = cols.white .. cols.dim
+	local test_col = cols.green .. cols.bright
+
+	local suite_name = ""
+	local test_name = ""
+	local suite_count = 0
+
+	local function inject_io_write(content)
+		inject_astnode(
+			aster.CallMethod{
+				"write",
+				{aster.String{content}},
+				aster.DotIndex{
+					"stdout",
+					aster.Id{ "io" }
+				}
 			}
-		}
-	)
-end
+		)
+	end
 
-local function inject_io_flush()
-	inject_astnode(
-		aster.CallMethod{
-			aster.String{"flush"},
-			{},
-			aster.DotIndex{
-				aster.String{"stdout"},
-				aster.Id{ "io" }
+	local function inject_io_flush()
+		inject_astnode(
+			aster.CallMethod{
+				"flush",
+				{},
+				aster.DotIndex{
+					"stdout",
+					aster.Id{ "io" }
+				}
 			}
-		}
-	)
-end
+		)
+	end
 
 
 
-function begin_test_suite(name)
-	suite_name = name
-	suite_count = 0
-	inject_io_write('[ ] ' .. name .. ' : x (0)\r')
-	inject_io_flush()
-end
+	function begin_test_suite(name)
+		suite_name = name
+		suite_count = 0
+	end
 
-function end_test_suite()
-	inject_io_write('[x] ' .. suite_name .. ' : All OK (' .. tostring(suite_count) .. ')\n')
-	inject_io_flush()
-end
-
-function begin_test(name)
-	test_name = name
-	suite_count = suite_count + 1
-	inject_io_write('[ ] ' .. suite_name .. ' : ' .. name .. ' (' .. tostring(suite_name) .. ')\r')
-	inject_io_flush()
-end
-
-function end_test()
+	function begin_test(name)
+		test_name = name
+		suite_count = suite_count + 1
+		inject_io_write(' ' .. suite_col .. suite_name .. pipe_col .. '\t' .. test_col .. name .. cols.reset .. '\n')
+		inject_io_flush()
+	end
 
 end

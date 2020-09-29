@@ -3,6 +3,11 @@ require 'plib/core/sumtype'
 require 'plib/meta/concepts'
 require 'plib/meta/unit_test'
 
+-- For testing :
+## require('plib.meta.unit_test')(_ENV)
+require 'io'
+
+
 
 ## local make_option
 ## make_option = generalize(function(T)
@@ -18,10 +23,9 @@ require 'plib/meta/unit_test'
 	end
 
 	local function remove_method(t, m)
-		static_passert(t.metafields[m], string.format("Method '%s' not found.", m))
+		static_assert(t.metafields[m], string.format("Method '%s' not found.", m))
 		t.metafields[m] = nil
 	end
-
 
 	]]
 
@@ -36,174 +40,214 @@ require 'plib/meta/unit_test'
 	## optionT.value.is_option = true
 	## optionT.value.subtype = T
 
-	## rename_method(optionT.value, 'unwrap_some', 'unwrap')
+	## if T ~= primtypes.niltype then
+
+		## rename_method(optionT.value, 'unwrap_some', 'unwrap')
 
 
-
-	function optionT.as_ptr(self: *optionT) <polymorphic>
-		if self:is_some() then
-			return (@option(*T)).some(self:_unwrap_some_ptr())
-		else
-			return (@option(*T)).none()
+		function optionT.as_ptr(self: *optionT) <polymorphic>
+			if self:is_some() then
+				return (@option(*T)).some(self:_unwrap_some_ptr())
+			else
+				return (@option(*T)).none()
+			end
 		end
-	end
 
-	function optionT.expect(self: optionT, m: stringview): T
-		passert(self:is_some(), m)
-		return self:unwrap()
-	end
-
-	function optionT.unwrap_or(self: optionT, v: T): T
-		if self:is_some() then
+		function optionT.expect(self: optionT, m: stringview): T
+			assert(self:is_some(), m)
 			return self:unwrap()
-		else
-			return v
 		end
-	end
 
-	function optionT.unwrap_or_else(self: optionT, f: functor(T)): T
-		if self:is_some() then
-			return self:unwrap()
-		else
-			return f()
+		function optionT.unwrap_or(self: optionT, v: T): T
+			if self:is_some() then
+				return self:unwrap()
+			else
+				return v
+			end
 		end
-	end
 
-	function optionT.map(self: optionT, f: functor(auto, T))
-		local U = #[f.type.rettypes[1]]#
-		if self:is_some() then
-			return (@option(U)).some(f(self:unwrap()))
-		else
-			return (@option(U)).none()
+		function optionT.unwrap_or_else(self: optionT, f: functor(T)): T
+			if self:is_some() then
+				return self:unwrap()
+			else
+				return f()
+			end
 		end
-	end
 
-	function optionT.map_or(self: optionT, v: auto, f: functor(auto, T))
-		##[[	
-			static_passert(v.type == f.type.rettypes[1], 
-				"The type of 'v' (" .. tostring(v.type) .. 
-				") and the return type of 'f' (" .. tostring(f.type.rettypes[1]) .. 
-				") aren't the same.")
-		]]
-		local U = #[v.type]#
-
-		if self:is_some() then
-			return f(self:unwrap())
-		else
-			return v
+		function optionT.map(self: optionT, f: functor(auto, T))
+			local U = #[f.type.rettypes[1]]#
+			if self:is_some() then
+				return (@option(U)).some(f(self:unwrap()))
+			else
+				return (@option(U)).none()
+			end
 		end
-	end
 
-	function optionT.map_or_else(self: optionT, fd: functor(auto), f: functor(auto, T))
+		function optionT.map_or(self: optionT, v: auto, f: functor(auto, T))
+			##[[	
+				static_assert(v.type == f.type.rettypes[1], 
+					"The type of 'v' (" .. tostring(v.type) .. 
+					") and the return type of 'f' (" .. tostring(f.type.rettypes[1]) .. 
+					") aren't the same.")
+			]]
+			local U = #[v.type]#
+
+			if self:is_some() then
+				return f(self:unwrap())
+			else
+				return v
+			end
+		end
+
+		function optionT.map_or_else(self: optionT, fd: functor(auto), f: functor(auto, T))
+			##[[
+				static_assert(fd.type.rettypes[1] == f.type.rettypes[1],
+					"The return types of 'fd' (" .. tostring(fd.type.rettypes[1]) ..
+					") and 'f' (" .. tostring(fd.type.rettypes[1]) .. 
+					") aren't the same.")
+			]]
+			local U = #[fd.type.rettypes[1]]#
+
+			if self:is_some() then
+				return f(self:unwrap())
+			else
+				return fd()
+			end
+		end
+
+		function optionT.and_(self: optionT, o: auto)
+			##[[
+				static_assert(o.type.is_option, "'o' isn't an option.")
+			]]
+			local U = #[o.type.subtype]#
+
+			if self:is_some() then
+				return o
+			else
+				return (@option(U)).none()
+			end
+		end
+
+		function optionT.and_then(self: optionT, f: functor(auto, T))
+			##[[
+				static_assert(f.type.rettypes[1].is_option, "'f' doesn't return an " ..
+					" option (want: function(" .. tostring(T) .. "): option(U), " .. 
+					"has: " .. tostring(f.type) .. ").")
+			]]
+			local U = #[f.type.rettypes[1].subtype]#
+
+			if self:is_some() then
+				return f(self:unwrap())
+			else
+				return (@option(U)).none()
+			end
+		end
+
+
+
+		function optionT.or_(self: optionT, o: optionT)
+			if self:is_some() then
+				return self
+			else
+				return o
+			end
+		end
+
+		function optionT.or_else(self: optionT, f: functor(optionT))
+			if self:is_some() then
+				return self
+			else
+				return f()
+			end
+		end
+
+		function optionT.xor(self: optionT, o: optionT)
+			if self:is_some() and o:is_none() then
+				return self
+			elseif self:is_none() and o:is_none() then
+				return o
+			else
+				return optionT.none()
+			end
+		end
+
+		function optionT.get_or_insert(self: *optionT, v: T): *T
+			if self:is_some() then
+				return self:unwrap_some_ptr()
+			else
+				self:morph_into_some(v)
+				return self:unwrap_some_ptr()
+			end
+		end
+
+		function optionT.get_or_insert_with(self: *optionT, f: functor(T)): *T
+			if self:is_some() then
+				return self:unwrap_some_ptr()
+			else
+				self:morph_into_some(v)
+				return self:unwrap_some_ptr()
+			end
+		end
+
+		function optionT.take(self: *optionT): optionT
+			if self:is_some() then
+				local d = self:unwrap()
+				self:morph_into_none()
+				return optionT.some(d)
+			else
+				return optionT.none()
+			end
+		end
+
+		function optionT.replace(self: *optionT, v: T): optionT
+			if self:is_some() then
+				local old = optionT.some(self:unwrap())
+				self:morph_into_some(v)
+				return old
+			else
+				self:morph_into_some(v)
+				return optionT.none()
+			end
+		end
+
+
 		##[[
-			static_passert(fd.type.rettypes[1] == f.type.rettypes[1],
-				"The return types of 'fd' (" .. tostring(fd.type.rettypes[1]) ..
-				") and 'f' (" .. tostring(fd.type.rettypes[1]) .. 
-				") aren't the same.")
+
+		local convert_concept = concept(function(t) 
+			if t.type.is_option then
+				if t.type.subtype == primtypes.niltype then
+					return true
+				else
+					local ok, err = T:is_convertible_from_type(t.type.subtype)
+					if not ok then return false, err end
+					return true
+				end
+			end
+
+			local ok, err = T:is_convertible_from_type(t.type)
+			if not ok then return false, err end
+			return true
+		end)
+
 		]]
-		local U = #[fd.type.rettypes[1]]#
 
-		if self:is_some() then
-			return f(self:unwrap())
-		else
-			return fd()
+		function optionT.__convert(n: #[convert_concept]#)
+			## if n.type.is_option then
+				## if n.type.subtype == primtypes.niltype then
+					return optionT.none()
+				## else
+					if n:is_some() then
+						return optionT.some(n:unwrap())
+					else
+						return optionT.none()
+					end
+				## end
+			## else
+				return optionT.some(n)
+			## end
 		end
-	end
 
-	function optionT.and_(self: optionT, o: auto)
-		##[[
-			static_passert(o.type.is_option, "'o' isn't an option.")
-		]]
-		local U = #[o.type.subtype]#
-
-		if self:is_some() then
-			return o
-		else
-			return (@option(U)).none()
-		end
-	end
-
-	function optionT.and_then(self: optionT, f: functor(auto, T))
-		##[[
-			static_passert(f.type.rettypes[1].is_option, "'f' doesn't return an " ..
-				" option (want: function(" .. tostring(T) .. "): option(U), " .. 
-				"has: " .. tostring(f.type) .. ").")
-		]]
-		local U = #[f.type.rettypes[1].subtype]#
-
-		if self:is_some() then
-			return f(self:unwrap())
-		else
-			return (@option(U)).none()
-		end
-	end
-
-
-
-	function optionT.or_(self: optionT, o: optionT)
-		if self:is_some() then
-			return self
-		else
-			return o
-		end
-	end
-
-	function optionT.or_else(self: optionT, f: functor(optionT))
-		if self:is_some() then
-			return self
-		else
-			return f()
-		end
-	end
-
-	function optionT.xor(self: optionT, o: optionT)
-		if self:is_some() and o:is_none() then
-			return self
-		elseif self:is_none() and o:is_none() then
-			return o
-		else
-			return optionT.none()
-		end
-	end
-
-	function optionT.get_or_insert(self: *optionT, v: T): *T
-		if self:is_some() then
-			return self:unwrap_some_ptr()
-		else
-			self:morph_into_some(v)
-			return self:unwrap_some_ptr()
-		end
-	end
-
-	function optionT.get_or_insert_with(self: *optionT, f: functor(T)): *T
-		if self:is_some() then
-			return self:unwrap_some_ptr()
-		else
-			self:morph_into_some(v)
-			return self:unwrap_some_ptr()
-		end
-	end
-
-	function optionT.take(self: *optionT): optionT
-		if self:is_some() then
-			local d = self:unwrap()
-			self:morph_into_none()
-			return optionT.some(d)
-		else
-			return optionT.none()
-		end
-	end
-
-	function optionT.replace(self: *optionT, v: T): optionT
-		if self:is_some() then
-			local old = optionT.some(self:unwrap())
-			self:morph_into_some(v)
-			return old
-		else
-			self:morph_into_some(v)
-			return optionT.none()
-		end
-	end
+	## end
 
 
 	## return optionT
@@ -217,146 +261,145 @@ global function Some(v: auto)
 	return (@option(T)).some(v)
 end
 
-global function None(T: type)
-	return (@option(T)).none()
+global function None(): option(niltype)
+	return (@option(niltype)).none()
 end
 
 
-## dofile 'sources/plib/meta/unit_test.lua'
-## begin_test_suite 'core/option'
 
-	local x = Some(42_i)
-	local y = None(integer)
+## if TEST then
 
-	## begin_test 'is_some/is_none'
+	## begin_test_suite 'plib/core/option'
 
-		passert(x:is_some())
-		passert(y:is_none())
+		local x: option(integer) = Some(42_i)
+		local y: option(integer) = None()
 
-	## end_test()
+		## begin_test 'is_some/is_none'
 
-	## begin_test 'expect'
+			passert(x:is_some())
+			passert(y:is_none())
 
-		passert(x:expect("work") == 42)
-		--passert(y:expect("panic")) -- crashes, OK
+		## begin_test 'expect'
 
-	## end_test()
+			passert(x:expect("work") == 42)
+			--passert(y:expect("panic")) -- crashes, OK
 
-	## begin_test 'unwrap'
+		## begin_test 'unwrap'
 
-		passert(x:unwrap() == 42)
-		--passert(y:unwrap()) -- crashes, OK
+			passert(x:unwrap() == 42)
+			--passert(y:unwrap()) -- crashes, OK
 
-	## end_test()
+		## begin_test 'unwrap_or'
 
-	## begin_test 'unwrap_or'
+			passert(x:unwrap_or(24) == 42)
+			passert(y:unwrap_or(24) == 24)
 
-		passert(x:unwrap_or(24) == 42)
-		passert(y:unwrap_or(24) == 24)
+		## begin_test 'unwrap_or_else'
 
-	## end_test()
+			local function f0(): integer
+				return 24
+			end
 
-	## begin_test 'unwrap_or_else'
+			passert(x:unwrap_or_else(f0) == 42)
+			passert(y:unwrap_or_else(f0) == 24)
 
-		local function f0(): integer
-			return 24
-		end
+		## begin_test 'map'
 
-		passert(x:unwrap_or_else(f0) == 42)
-		passert(y:unwrap_or_else(f0) == 24)
+			local function f1(v: integer): number
+				return (@number)(v * 2)
+			end
 
-	## end_test()
+			passert(x:map(f1):unwrap() == 84)
+			passert(y:map(f1):is_none())
 
-	## begin_test 'map'
+		## begin_test 'map_or'
 
-		local function f1(v: integer): number
-			return (@number)(v * 2)
-		end
+			local function f2(v: integer): integer
+				return v * 2
+			end
 
-		passert(x:map(f1):unwrap() == 84)
-		passert(y:map(f1):is_none())
+			passert(x:map_or(24, f2) == 84)
+			passert(y:map_or(24, f2) == 24)
 
-	## end_test()
+		## begin_test 'map_or_else'
 
-	## begin_test 'map_or'
+			local function f3_0(): integer
+				return 24
+			end
 
-		local function f2(v: integer): integer
-			return v * 2
-		end
+			local function f3_1(v: integer): integer
+				return v - 2
+			end
 
-		passert(x:map_or(24, f2) == 84)
-		passert(y:map_or(24, f2) == 24)
+			passert(x:map_or_else(f3_0, f3_1) == 40)
+			passert(y:map_or_else(f3_0, f3_1) == 24)
 
-	## end_test()
+		## begin_test 'and_'
 
-	## begin_test 'map_or_else'
+			passert(x:and_(y):is_none())
 
-		local function f3_0(): integer
-			return 24
-		end
+		## begin_test 'and_then'
 
-		local function f3_1(v: integer): integer
-			return v - 2
-		end
+			local function f4(v: integer): option(number)
+				return Some(v*10_n)
+			end
 
-		passert(x:map_or_else(f3_0, f3_1) == 40)
-		passert(y:map_or_else(f3_0, f3_1) == 24)
+			passert(x:and_then(f4):unwrap() == 420)
+			passert(y:and_then(f4):is_none())
 
-	## end_test()
+		## begin_test 'or_'
 
-	## begin_test 'and_'
+			passert(x:or_(y):unwrap() == 42)
 
-		passert(x:and_(y):is_none())
+		## begin_test 'or_else'
 
-	## end_test()
+			local function f5(): option(integer)
+				return Some(10_i)
+			end
 
-	## begin_test 'and_then'
+			passert(x:or_else(f5):unwrap() == 42)
+			passert(y:or_else(f5):unwrap() == 10)
 
-		local function f4(v: integer): option(number)
-			return Some(v*10_n)
-		end
+		## begin_test 'get_or_insert'
 
-		passert(x:and_then(f4):unwrap() == 420)
-		passert(y:and_then(f4):is_none())
+			passert($x:get_or_insert(10) == 42)
+			passert($y:get_or_insert(10) == 10)
 
-	## end_test()
+		## begin_test 'take'
 
-	## begin_test 'or_'
+			passert(y:take():unwrap() == 10)
+			passert(y:take():is_none())
 
-		passert(x:or_(y):unwrap() == 42)
+		## begin_test 'replace'
 
-	## end_test()
+			passert(x:replace(10):unwrap() == 42)
+			passert(x:unwrap() == 10)
 
-	## begin_test 'or_else'
+		## begin_test 'convertion from option(T)'
 
-		local function f5(): option(integer)
-			return Some(10_i)
-		end
+			local x: option(integer) = Some(10)
+			local y: option(uinteger) = x
 
-		passert(x:or_else(f5):unwrap() == 42)
-		passert(y:or_else(f5):unwrap() == 10)
+			passert(y:is_some() and y:unwrap() == 10_n)
 
-	## end_test()
+			local x: option(integer) = None()
+			local y: option(uinteger) = x
 
-	## begin_test 'get_or_insert'
+			passert(y:is_none())
 
-		passert($x:get_or_insert(10) == 42)
-		passert($y:get_or_insert(10) == 10)
 
-	## end_test()
+		## begin_test 'convertion from T'
 
-	## begin_test 'take'
+			local x: option(integer) = 10
 
-		passert(y:take():unwrap() == 10)
-		passert(y:take():is_none())
+			passert(x:is_some() and x:unwrap() == 10_i)
 
-	## end_test()
 
-	## begin_test 'replace'
+		## begin_test 'convertion from U'
 
-		passert(x:replace(10):unwrap() == 42)
-		passert(x:unwrap() == 10)
+			local x: option(integer) = 10_u
 
-	## end_test()
+			passert(x:is_some() and x:unwrap() == 10_i)
 
-## end_test_suite()
+
+## end
