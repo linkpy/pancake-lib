@@ -1,17 +1,21 @@
 
+## if TEST then
 
+	##[[ 
 
-## function test_suite(name, block)
-	## 	if TEST then
-		print(#['==== ' .. name]#)
-		## block()
-	## end
+	local passert_dummy_concept = concept(function(x)
+		local t = types.NiltypeType('niltype')
+		t.is_equal = function() return false end
+		t.text = context:get_parent_node():format_message('error', 'test assert failed')
+		return t
+	end)
+
+	]]
+
+	global function passert(cond: boolean, dummy: #[passert_dummy_concept]#)
+		if not cond then
+			error(#[dummy.type.text]#)
+		end
+	end
+
 ## end
-
-## function test(desc, block)
-	print(#['   - ' .. desc]#)
-##	block()
-## end
-
-
-

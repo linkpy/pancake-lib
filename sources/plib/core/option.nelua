@@ -18,7 +18,7 @@ require 'plib/meta/unit_test'
 	end
 
 	local function remove_method(t, m)
-		static_assert(t.metafields[m], string.format("Method '%s' not found.", m))
+		static_passert(t.metafields[m], string.format("Method '%s' not found.", m))
 		t.metafields[m] = nil
 	end
 
@@ -49,7 +49,7 @@ require 'plib/meta/unit_test'
 	end
 
 	function optionT.expect(self: optionT, m: stringview): T
-		assert(self:is_some(), m)
+		passert(self:is_some(), m)
 		return self:unwrap()
 	end
 
@@ -80,7 +80,7 @@ require 'plib/meta/unit_test'
 
 	function optionT.map_or(self: optionT, v: auto, f: functor(auto, T))
 		##[[	
-			static_assert(v.type == f.type.rettypes[1], 
+			static_passert(v.type == f.type.rettypes[1], 
 				"The type of 'v' (" .. tostring(v.type) .. 
 				") and the return type of 'f' (" .. tostring(f.type.rettypes[1]) .. 
 				") aren't the same.")
@@ -96,7 +96,7 @@ require 'plib/meta/unit_test'
 
 	function optionT.map_or_else(self: optionT, fd: functor(auto), f: functor(auto, T))
 		##[[
-			static_assert(fd.type.rettypes[1] == f.type.rettypes[1],
+			static_passert(fd.type.rettypes[1] == f.type.rettypes[1],
 				"The return types of 'fd' (" .. tostring(fd.type.rettypes[1]) ..
 				") and 'f' (" .. tostring(fd.type.rettypes[1]) .. 
 				") aren't the same.")
@@ -112,7 +112,7 @@ require 'plib/meta/unit_test'
 
 	function optionT.and_(self: optionT, o: auto)
 		##[[
-			static_assert(o.type.is_option, "'o' isn't an option.")
+			static_passert(o.type.is_option, "'o' isn't an option.")
 		]]
 		local U = #[o.type.subtype]#
 
@@ -125,7 +125,7 @@ require 'plib/meta/unit_test'
 
 	function optionT.and_then(self: optionT, f: functor(auto, T))
 		##[[
-			static_assert(f.type.rettypes[1].is_option, "'f' doesn't return an " ..
+			static_passert(f.type.rettypes[1].is_option, "'f' doesn't return an " ..
 				" option (want: function(" .. tostring(T) .. "): option(U), " .. 
 				"has: " .. tostring(f.type) .. ").")
 		]]
@@ -222,74 +222,74 @@ global function None(T: type)
 end
 
 
-
-## test_suite('core/option', function()
+## dofile 'sources/plib/meta/unit_test.lua'
+## begin_test_suite 'core/option'
 
 	local x = Some(42_i)
 	local y = None(integer)
 
-	## test('is_some/is_none', function()
+	## begin_test 'is_some/is_none'
 
-		assert(x:is_some())
-		assert(y:is_none())
+		passert(x:is_some())
+		passert(y:is_none())
 
-	## end)
+	## end_test()
 
-	## test('expect', function()
+	## begin_test 'expect'
 
-		assert(x:expect("work") == 42)
-		--assert(y:expect("panic")) -- crashes, OK
+		passert(x:expect("work") == 42)
+		--passert(y:expect("panic")) -- crashes, OK
 
-	## end)
+	## end_test()
 
-	## test('unwrap', function()
+	## begin_test 'unwrap'
 
-		assert(x:unwrap() == 42)
-		--assert(y:unwrap()) -- crashes, OK
+		passert(x:unwrap() == 42)
+		--passert(y:unwrap()) -- crashes, OK
 
-	## end)
+	## end_test()
 
-	## test('unwrap_or', function()
+	## begin_test 'unwrap_or'
 
-		assert(x:unwrap_or(24) == 42)
-		assert(y:unwrap_or(24) == 24)
+		passert(x:unwrap_or(24) == 42)
+		passert(y:unwrap_or(24) == 24)
 
-	## end)
+	## end_test()
 
-	## test('unwrap_or_else', function()
+	## begin_test 'unwrap_or_else'
 
 		local function f0(): integer
 			return 24
 		end
 
-		assert(x:unwrap_or_else(f0) == 42)
-		assert(y:unwrap_or_else(f0) == 24)
+		passert(x:unwrap_or_else(f0) == 42)
+		passert(y:unwrap_or_else(f0) == 24)
 
-	## end)
+	## end_test()
 
-	## test('map', function()
+	## begin_test 'map'
 
 		local function f1(v: integer): number
 			return (@number)(v * 2)
 		end
 
-		assert(x:map(f1):unwrap() == 84)
-		assert(y:map(f1):is_none())
+		passert(x:map(f1):unwrap() == 84)
+		passert(y:map(f1):is_none())
 
-	## end)
+	## end_test()
 
-	## test('map_or', function()
+	## begin_test 'map_or'
 
 		local function f2(v: integer): integer
 			return v * 2
 		end
 
-		assert(x:map_or(24, f2) == 84)
-		assert(y:map_or(24, f2) == 24)
+		passert(x:map_or(24, f2) == 84)
+		passert(y:map_or(24, f2) == 24)
 
-	## end)
+	## end_test()
 
-	## test('map_or_else', function()
+	## begin_test 'map_or_else'
 
 		local function f3_0(): integer
 			return 24
@@ -299,64 +299,64 @@ end
 			return v - 2
 		end
 
-		assert(x:map_or_else(f3_0, f3_1) == 40)
-		assert(y:map_or_else(f3_0, f3_1) == 24)
+		passert(x:map_or_else(f3_0, f3_1) == 40)
+		passert(y:map_or_else(f3_0, f3_1) == 24)
 
-	## end)
+	## end_test()
 
-	## test('and_', function()
+	## begin_test 'and_'
 
-		assert(x:and_(y):is_none())
+		passert(x:and_(y):is_none())
 
-	## end)
+	## end_test()
 
-	## test('and_then', function()
+	## begin_test 'and_then'
 
 		local function f4(v: integer): option(number)
 			return Some(v*10_n)
 		end
 
-		assert(x:and_then(f4):unwrap() == 420)
-		assert(y:and_then(f4):is_none())
+		passert(x:and_then(f4):unwrap() == 420)
+		passert(y:and_then(f4):is_none())
 
-	## end)
+	## end_test()
 
-	## test('or_', function()
+	## begin_test 'or_'
 
-		assert(x:or_(y):unwrap() == 42)
+		passert(x:or_(y):unwrap() == 42)
 
-	## end)
+	## end_test()
 
-	## test('or_else', function()
+	## begin_test 'or_else'
 
 		local function f5(): option(integer)
 			return Some(10_i)
 		end
 
-		assert(x:or_else(f5):unwrap() == 42)
-		assert(y:or_else(f5):unwrap() == 10)
+		passert(x:or_else(f5):unwrap() == 42)
+		passert(y:or_else(f5):unwrap() == 10)
 
-	## end)
+	## end_test()
 
-	## test('get_or_insert', function()
+	## begin_test 'get_or_insert'
 
-		assert($x:get_or_insert(10) == 42)
-		assert($y:get_or_insert(10) == 10)
+		passert($x:get_or_insert(10) == 42)
+		passert($y:get_or_insert(10) == 10)
 
-	## end)
+	## end_test()
 
-	## test('take', function()
+	## begin_test 'take'
 
-		assert(y:take():unwrap() == 10)
-		assert(y:take():is_none())
+		passert(y:take():unwrap() == 10)
+		passert(y:take():is_none())
 
-	## end)
+	## end_test()
 
-	## test('replace', function()
+	## begin_test 'replace'
 
-		assert(x:replace(10):unwrap() == 42)
-		assert(x:unwrap() == 10)
+		passert(x:replace(10):unwrap() == 42)
+		passert(x:unwrap() == 10)
 
-	## end)
+	## end_test()
 
-## end)
+## end_test_suite()
