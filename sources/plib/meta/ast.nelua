@@ -1,0 +1,21 @@
+
+##[[
+
+function local_bind(n, v)
+	inject_astnode(
+		aster.VarDecl {
+			"local",
+			{aster.IdDecl{n, nil, nil}},
+			{aster.PreprocessExpr{n}}
+		}
+	)
+	return v
+end
+
+function local_binder(f)
+	return function(n, ...)
+		return local_bind(n, f(...))
+	end
+end
+
+]]

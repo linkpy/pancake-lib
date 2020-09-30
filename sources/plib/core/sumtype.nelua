@@ -51,7 +51,7 @@ require 'plib/core/cll'
 
 	local function make_record(fields, tagenum, size)
 		local recordtype = types.RecordType()
-
+		
 		recordtype:add_field('__tag', tagenum.subtype)
 
 		for _, field in ipairs(fields) do
@@ -109,6 +109,7 @@ require 'plib/core/cll'
 
 	local sumtypeT_tag <nickname #[nickname .. "#TAG"]#> = #[make_tag_enum(entries)]#
 	local sumtypeT <nickname #[nickname]#> = #[make_record({}, sumtypeT_tag.value, size)]#
+
 
 	## for name, entry in pairs(entries) do
 		## variants[name] = make_variant_record(entry, sumtypeT_tag.value, size)

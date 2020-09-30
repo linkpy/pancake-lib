@@ -1,19 +1,123 @@
 
+
+## local metafields = require 'plib/meta/metafields'
+
+require 'plib/core/sumtype'
 require 'plib/meta/concepts'
+
+
+## if TEST then
+	## require('plib.meta.unit_test')(_ENV)
+	require 'io'
+## end
+
+
 
 ## local make_result
 ## make_result = generalize(function(T, E)
 
 	local T = #[T]#
 	local E = #[E]#
+	local result = #[make_result]#
 
-	local resultT = @record {
-		ok: boolean,
-		data: T,
+	local resultT = @sumtype(#['result(' .. tostring(T) .. ", " .. tostring(E) .. ")"]#, record {
+		ok: T,
 		err: E
-	}
+	})
+
+	## resultT.value.is_result = true
+	## resultT.value.subtype = T
+	## resultT.value.errtype = E
+
+	## metafields.rename_method(resultT.value, 'unwrap_ok', 'unwrap')
+	## metafields.rename_method(resultT.value, 'unwrap_ok_ptr', 'unwrap_ptr')
 
 	
+	function resultT.as_ptr(self: *resultT) <polymorphic>
+		if self:is_ok() then
+			return (@result(*T, *E)).ok(self:unwrap_ptr())
+		else
+			return (@result(*T, *E)).err(self:unwrap_err_ptr())
+		end
+	end
+
+	function resultT.map(self: resultT, f: functor(auto, T))
+		local U = #[f.type.rettypes[1]]#
+		if self:is_ok() then
+			return (@result(U, E)).ok(f(self:unwrap()))
+		else
+			return (@result(U, E)).err(self:unwrap_err())
+		end
+	end
+
+	function resultT.map_or(self: resultT, v: auto, f: functor(auto, T))
+		##[[
+			static_assert(v.type == f.type.rettypes[1], 
+				"The type of 'v' (" .. tostring(v.type) .. 
+				") and the return type of 'f' (" .. tostring(f.type.rettypes[1]) .. 
+				") aren't the same.")
+		]]
+		local U = #[v.type]#
+
+		if self:is_ok() then
+			return f(self:unwrap())
+		else
+			return v
+		end
+	end
+
+	function resultT.map_or_else(self: resultT, fd: functor(auto, E), f: functor(auto, T))
+		##[[
+			static_assert(fd.type.rettypes[1] == f.type.rettypes[1],
+				"The return types of 'fd' (" .. tostring(fd.type.rettypes[1]) ..
+				") and 'f' (" .. tostring(fd.type.rettypes[1]) .. 
+				") aren't the same.")
+		]]
+		local U = #[fd.type.rettypes[1]]#
+
+		if self:is_ok() then
+			return f(self:unwrap())
+		else
+			return fd(self:unwrap_err())
+		end
+	end
+
+	function resultT.map_err(self: resultT, f: functor(auto, E))
+		local F = #[f.type.rettype[1]]#
+		if self:is_ok() then
+			return (@option(T, F)).ok(self:unwrap())
+		else
+			return (@option(T, F)).err(f(self:unwrap_err()))
+		end
+	end	
+
+	function resultT.and_(self: resultT, res: resultT): resultT
+		if self:is_ok() then
+			return res
+		else
+			return self
+		end
+	end
+
+	function resultT.and_then(self: resutlT, f: functor(auto, T))
+		##[[
+			static_assert(f.type.rettypes[1].is_result, "'f' doesn't return an " ..
+				"result (want: function(" .. tostring(T) .. "): result(U, E), " .. 
+				"has: " .. tostring(f.type) .. ").")
+			static_assert(f.type.rettypes[1].errtype == E, "'f' doesn't return an " ..
+				"option with the right error type (want error type: " .. tostring(E) ..
+				", has: " .. tostring(f.type.rettypes[1].errtype ))
+		]]
+		local U = #[f.type.rettypes[1]]#
+		if self:is_ok() then
+			return f(self:unwrap())
+		else
+			return (@result(U, E)).err(self:unwrap_err())
+		end
+	end
+
+	function resultT.or_(self: resultT, res: auto)
+	end
 
 
 	## return resultT

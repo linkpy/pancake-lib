@@ -1,33 +1,48 @@
 
-require 'plib/core/sumtype'
-require 'plib/meta/concepts'
-require 'plib/meta/unit_test'
+## local metafields = require 'plib/meta/metafields'
 
--- For testing :
-## require('plib.meta.unit_test')(_ENV)
-require 'io'
+require 'plib/meta/concepts'
+require 'plib/meta/ast'
+require 'plib/meta/asserts'
+require 'plib/core/sumtype'
+
+
+
+## if TEST then
+	## require('plib.meta.unit_test')(_ENV)
+
+	require 'io'
+	require 'plib/meta/unit_test'
+## end
+
+
+
+##[[
+
+option_concept = generic(memoize(function(T) 
+	return concept(function(attr)
+		if not attr.type.is_option then
+			return false, 
+				string.format("the type isn't an option (got: %s)", attr.type)
+		end
+
+		local ok, err = type_is(attr.type.subtype, T)
+		if not ok then
+			return false, 
+				string.format("subtype invalid (got: %s, want: %s, type error: %s)",
+					attr.type.subtype, T, err)
+		end
+
+		return true
+	end)
+end))
+
+]]
 
 
 
 ## local make_option
 ## make_option = generalize(function(T)
-
-	##[[
-	local function rename_method(t, m, nm)
-		if not t.metafields[m] then
-			return
-		end
-
-		t.metafields[nm] = t.metafields[m]
-		t.metafields[m] = nil
-	end
-
-	local function remove_method(t, m)
-		static_assert(t.metafields[m], string.format("Method '%s' not found.", m))
-		t.metafields[m] = nil
-	end
-
-	]]
 
 	local T = #[T]#
 	local option = #[make_option]# 
@@ -42,12 +57,13 @@ require 'io'
 
 	## if T ~= primtypes.niltype then
 
-		## rename_method(optionT.value, 'unwrap_some', 'unwrap')
+		## metafields.rename_method(optionT.value, 'unwrap_some', 'unwrap')
+		## metafields.rename_method(optionT.value, 'unwrap_some_ptr', 'unwrap_ptr')
 
 
 		function optionT.as_ptr(self: *optionT) <polymorphic>
 			if self:is_some() then
-				return (@option(*T)).some(self:_unwrap_some_ptr())
+				return (@option(*T)).some(self:unwrap_ptr())
 			else
 				return (@option(*T)).none()
 			end
@@ -84,13 +100,7 @@ require 'io'
 		end
 
 		function optionT.map_or(self: optionT, v: auto, f: functor(auto, T))
-			##[[	
-				static_assert(v.type == f.type.rettypes[1], 
-					"The type of 'v' (" .. tostring(v.type) .. 
-					") and the return type of 'f' (" .. tostring(f.type.rettypes[1]) .. 
-					") aren't the same.")
-			]]
-			local U = #[v.type]#
+			## concept_assert( functor_concept(v.type, T), f )
 
 			if self:is_some() then
 				return f(self:unwrap())
@@ -100,13 +110,7 @@ require 'io'
 		end
 
 		function optionT.map_or_else(self: optionT, fd: functor(auto), f: functor(auto, T))
-			##[[
-				static_assert(fd.type.rettypes[1] == f.type.rettypes[1],
-					"The return types of 'fd' (" .. tostring(fd.type.rettypes[1]) ..
-					") and 'f' (" .. tostring(fd.type.rettypes[1]) .. 
-					") aren't the same.")
-			]]
-			local U = #[fd.type.rettypes[1]]#
+			## concept_assert( functor_concept(fd.type.rettypes[1], T), f )
 
 			if self:is_some() then
 				return f(self:unwrap())
@@ -116,10 +120,8 @@ require 'io'
 		end
 
 		function optionT.and_(self: optionT, o: auto)
-			##[[
-				static_assert(o.type.is_option, "'o' isn't an option.")
-			]]
-			local U = #[o.type.subtype]#
+			local U = #[type_assert( option_concept(primtypes.auto), o ).subtype]#
+			## print("and_", U)
 
 			if self:is_some() then
 				return o
@@ -129,12 +131,12 @@ require 'io'
 		end
 
 		function optionT.and_then(self: optionT, f: functor(auto, T))
-			##[[
-				static_assert(f.type.rettypes[1].is_option, "'f' doesn't return an " ..
-					" option (want: function(" .. tostring(T) .. "): option(U), " .. 
-					"has: " .. tostring(f.type) .. ").")
-			]]
-			local U = #[f.type.rettypes[1].subtype]#
+			local U = #[
+				concept_assert(
+					functor_concept(option_concept(primtypes.auto), T), f
+				).rettypes[1].subtype
+			]#
+			## print("and_then", U)
 
 			if self:is_some() then
 				return f(self:unwrap())
@@ -173,19 +175,19 @@ require 'io'
 
 		function optionT.get_or_insert(self: *optionT, v: T): *T
 			if self:is_some() then
-				return self:unwrap_some_ptr()
+				return self:unwrap_ptr()
 			else
 				self:morph_into_some(v)
-				return self:unwrap_some_ptr()
+				return self:unwrap_ptr()
 			end
 		end
 
 		function optionT.get_or_insert_with(self: *optionT, f: functor(T)): *T
 			if self:is_some() then
-				return self:unwrap_some_ptr()
+				return self:unwrap_ptr()
 			else
 				self:morph_into_some(v)
-				return self:unwrap_some_ptr()
+				return self:unwrap_ptr()
 			end
 		end
 
@@ -218,15 +220,11 @@ require 'io'
 				if t.type.subtype == primtypes.niltype then
 					return true
 				else
-					local ok, err = T:is_convertible_from_type(t.type.subtype)
-					if not ok then return false, err end
-					return true
+					return T:is_convertible_from_type(t.type.subtype)
 				end
 			end
 
-			local ok, err = T:is_convertible_from_type(t.type)
-			if not ok then return false, err end
-			return true
+			return T:is_convertible_from_type(t.type)
 		end)
 
 		]]
@@ -336,7 +334,9 @@ end
 
 		## begin_test 'and_'
 
-			passert(x:and_(y):is_none())
+			local t: option(integer) = x:and_(y)
+
+			passert(t:is_none())
 
 		## begin_test 'and_then'
 
@@ -345,7 +345,7 @@ end
 			end
 
 			passert(x:and_then(f4):unwrap() == 420)
-			passert(y:and_then(f4):is_none())
+			passert(y:and_then(f4):is_none() == true)
 
 		## begin_test 'or_'
 

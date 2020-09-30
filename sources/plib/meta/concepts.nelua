@@ -1,4 +1,7 @@
 
+require 'plib/meta/asserts'
+
+
 --[============================================================================[
 ---	# FUNCTOR
 --- 
@@ -16,21 +19,20 @@ local function make_functorN(R, Args)
 				string.format("the type isn't a function (got: %s)", attr.type)
 		end
 
-
 		if #attr.type.rettypes ~= #R then
 			return false, 
 				string.format("the type doesn't have the right number of return values" ..
-					"(got: %d, want: %d)", #attr.type.retypes, #R)
+					"(got: %d, want: %d)", #attr.type.rettypes, #R)
 		end
 
 		for i, t in ipairs(R) do
-			if attr.type.rettypes[i] ~= t and not t.is_auto then
+			local ok, err = type_is(attr.type.rettypes[i], t)
+			if not ok then
 				return false, 
-					string.format("the return type #%d does not match (got: %s, want: %s)", 
-						i, attr.type.rettypes[i], t)
+					string.format("the return type #%d does not match (got: %s, want: %s, type error: %s)", 
+						i, attr.type.rettypes[i], t, err)
 			end
 		end
-
 
 		if #attr.type.argtypes ~= #Args then
 			return false, 
@@ -39,10 +41,11 @@ local function make_functorN(R, Args)
 		end
 
 		for i, t in ipairs(Args) do
-			if attr.type.argtypes[i] ~= t and not t.is_auto then
+			local ok, err = type_is(attr.type.argtypes[i], t)
+			if not ok then
 				return false, 
-					string.format("the argument type #%d does not match (got: %s, want: %s)", 
-						i, attr.type.argtpes[i], t)
+					string.format("the argument type #%d does not match (got: %s, want: %s, typ error: %s)", 
+						i, attr.type.argtypes[i], t, err)
 			end
 		end
 
@@ -50,11 +53,15 @@ local function make_functorN(R, Args)
 		return true
 	end)
 end
+
+functor_concept = generic(memoize(function(R, ...) return make_functorN({R}, {...}) end))
+functor2_concept = generic(memoize(function(R1, R2, ...) return make_functorN({R1, R2}, {...}) end))
+
 ]]
 
 
-global functor =  #[generalize(function(R, ...) return make_functorN({R}, {...}) end)]#
-global functor2 = #[generalize(function(R1, R2, ...) return make_functorN({R1, R2}, {...}) end)]#
+global functor =  #[functor_concept]#
+global functor2 = #[functor2_concept]#
 
 
 
@@ -65,33 +72,39 @@ global functor2 = #[generalize(function(R1, R2, ...) return make_functorN({R1, R
 --]============================================================================]
 
 ##[[
-local make_action = generalize(function(...)
-	local Args = arg
+local make_action = generic(memoize(function(...)
+	local Args = {...}
 
 	return concept(function(attr)
 		if not attr.type.is_function then
-			return false
+			return false, string.format("%s is not a function.", attr.type)
 		end
 
 
 		if #attr.type.rettypes ~= 0 then
-			return false
+			return false, string.format("%s shouldn't have return values.", attr.type)
 		end
 
 
 		if #attr.type.argtypes ~= #Args then
-			return false
+			return false, string.format("%s doesn't have the right number of argument (got: %d, need: %d)",
+				attr.type, #attr.argtypes, #Args)
 		end
 
 		for i, t in ipairs(Args) do
-			if attr.type.argtypes ~= t then
-				return false
+			local ok, err = type_is(attr.type.argtypes[i], t)
+			if not ok then
+				return false, 
+					string.format("the argument type #%d does not match (got: %s, want: %s, type error: %s)",
+						i, attr.type.argtypes[i], t, err)
 			end
 		end
 
 		return true
 	end)
-end)
+end))
+
+action_concept = make_action
 ]]
 
 global action = #[make_action]#

@@ -1,0 +1,77 @@
+
+require 'plib/meta/ast'
+
+
+--[============================================================================[
+---	# TYPE IS
+---
+--- Checks at preprocessing if both types are the same. It has some rules :
+---
+--- - if a or b are autotypes : it returns true
+--- - if a or b are concepts : it checks if a is convertible from b
+--- - otherwise, it checks if both types are equal
+---
+--]============================================================================]
+
+##[[
+function type_is(a, b)
+	static_assert(traits.is_type(a), string.format("'a' isn't a type (got: %s)", a))
+	static_assert(traits.is_type(b), string.format("'b' isn't a type (got: %s)", b))
+
+	if a.is_auto or b.is_auto then
+		return true, nil
+	elseif a.is_concept or b.is_concept then
+		if a.is_concept then
+			return a:is_convertible_from_type(b)
+		else 
+			return b:is_convertible_from_type(a)
+		end
+	else
+		return a == b, string.format("type %s isn't %s.", a, b)
+	end
+end
+]]
+
+
+
+--[============================================================================[
+---	# CONCEPT ASSERT
+---
+--- Checks during preprocessing that the given node's type fits the given 
+--- concept. It returns the node's type.
+--]============================================================================]
+
+##[[
+function concept_assert(c, o)
+	local r = (traits.is_attr(o) or traits.is_symbol(o)) and o.type or o
+	static_assert(traits.is_type(r), "`o` isn't a type, an attr or a is_symbol.")
+	static_assert(c:is_convertible_from_type(r))
+	return r
+end
+
+concept_assert_bind = local_binder(concept_assert)
+]]
+
+
+
+--[============================================================================[
+---	# TYPE ASSERT
+---
+--- Checks during preprocessing that the given node's type fits the given 
+--- type. Its returns the node's type.
+--]============================================================================]
+
+##[[
+function type_assert(t, o)
+	local r = (traits.is_attr(o) or traits.is_symbol(o)) and o.type or o
+	static_assert(traits.is_type(r), "`o` isn't a type, an attr or a is_symbol.")
+	static_assert(type_is(t, r))
+	return r
+end
+
+type_assert_bind = local_binder(type_assert_bind)
+]]
+
+
+
+
