@@ -48,7 +48,12 @@ return function(e)
 	function begin_test(name)
 		test_name = name
 		suite_count = suite_count + 1
-		inject_io_write(' ' .. suite_col .. suite_name .. pipe_col .. '\t' .. test_col .. name .. cols.reset .. '\n')
+
+		local mark = ' '
+
+		if suite_count == 1 then mark = "-" end
+
+		inject_io_write(pipe_col .. mark .. cols.reset .. suite_col .. suite_name .. pipe_col .. '\t' .. test_col .. name .. cols.reset .. '\n')
 		inject_io_flush()
 	end
 

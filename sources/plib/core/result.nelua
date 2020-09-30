@@ -1,9 +1,8 @@
 
 
-## local metafields = require 'plib/meta/metafields'
-
 require 'plib/core/sumtype'
 require 'plib/meta/concepts'
+require 'plib/meta/asserts'
 
 
 ## if TEST then
@@ -11,6 +10,35 @@ require 'plib/meta/concepts'
 	require 'io'
 ## end
 
+
+##[[
+
+result_concept = generic(memoize(function(T, E)
+	return concept(function(attr)
+		if not attr.is_result then
+			return false,
+				string.format("the type isn't a result (got: %s)", attr.type)
+		end
+
+		local ok, err = type_is(attr.type.subtype, T)
+		if not ok then
+			return false,
+				string.format("subtype invalid (got: %s, want: %s, type error: %s)",
+					attr.type.subtype, T, err)
+		end
+
+		ok, err = type_is(attr.type.errtype, E)
+		if not ok then
+			return false,
+				string.format("errtype invalid (got: %s, want: %s, type error: %s)",
+					attr.type.errtype, E, err)
+		end
+
+		return true
+	end)
+end))
+
+]]
 
 
 ## local make_result
@@ -29,67 +57,96 @@ require 'plib/meta/concepts'
 	## resultT.value.subtype = T
 	## resultT.value.errtype = E
 
-	## metafields.rename_method(resultT.value, 'unwrap_ok', 'unwrap')
-	## metafields.rename_method(resultT.value, 'unwrap_ok_ptr', 'unwrap_ptr')
+	## local has_T = T ~= primtypes.niltype
+	## local has_E = E ~= primtypes.niltype
 
-	
-	function resultT.as_ptr(self: *resultT) <polymorphic>
-		if self:is_ok() then
-			return (@result(*T, *E)).ok(self:unwrap_ptr())
-		else
-			return (@result(*T, *E)).err(self:unwrap_err_ptr())
+
+	## if has_T then
+
+		function resultT.unwrap(self: resultT): T
+			return self:unwrap_ok()
 		end
-	end
 
-	function resultT.map(self: resultT, f: functor(auto, T))
-		local U = #[f.type.rettypes[1]]#
-		if self:is_ok() then
-			return (@result(U, E)).ok(f(self:unwrap()))
-		else
-			return (@result(U, E)).err(self:unwrap_err())
+		function resultT.unwrap_ptr(self: *resultT): *T
+			return self:unwrap_ok_ptr()
 		end
-	end
 
-	function resultT.map_or(self: resultT, v: auto, f: functor(auto, T))
-		##[[
-			static_assert(v.type == f.type.rettypes[1], 
-				"The type of 'v' (" .. tostring(v.type) .. 
-				") and the return type of 'f' (" .. tostring(f.type.rettypes[1]) .. 
-				") aren't the same.")
-		]]
-		local U = #[v.type]#
-
-		if self:is_ok() then
-			return f(self:unwrap())
-		else
-			return v
+		function resultT.as_ptr(self: *resultT) <polymorphic>
+			if self:is_ok() then
+				return (@result(*T, *E)).ok(self:unwrap_ptr())
+			else
+				return (@result(*T, *E)).err(self:unwrap_err_ptr())
+			end
 		end
-	end
 
-	function resultT.map_or_else(self: resultT, fd: functor(auto, E), f: functor(auto, T))
-		##[[
-			static_assert(fd.type.rettypes[1] == f.type.rettypes[1],
-				"The return types of 'fd' (" .. tostring(fd.type.rettypes[1]) ..
-				") and 'f' (" .. tostring(fd.type.rettypes[1]) .. 
-				") aren't the same.")
-		]]
-		local U = #[fd.type.rettypes[1]]#
-
-		if self:is_ok() then
-			return f(self:unwrap())
-		else
-			return fd(self:unwrap_err())
+		function resultT.unwrap_or(self: resultT, v: T): T
+			if self:is_ok() then
+				return self:unwrap()
+			else
+				return v
+			end
 		end
-	end
 
-	function resultT.map_err(self: resultT, f: functor(auto, E))
-		local F = #[f.type.rettype[1]]#
-		if self:is_ok() then
-			return (@option(T, F)).ok(self:unwrap())
-		else
-			return (@option(T, F)).err(f(self:unwrap_err()))
+	## end
+
+	## if has_T and has_E then
+
+		function resultT.unwrap_or_else(self: resultT, f: functor(T, E)): T
+			if self:is_ok() then
+				return self:unwrap()
+			else
+				return f(self:unwrap_err())
+			end
 		end
-	end	
+
+		function resultT.map(self: resultT, f: functor(auto, T))
+			local U = #[f.type.rettypes[1]]#
+			if self:is_ok() then
+				return (@result(U, E)).ok(f(self:unwrap()))
+			else
+				return (@result(U, E)).err(self:unwrap_err())
+			end
+		end
+
+	## end
+
+	## if has_T then
+
+		function resultT.map_or(self: resultT, v: auto, f: functor(auto, T))
+			## concept_assert( functor_concept(v.type, T), f )
+
+			if self:is_ok() then
+				return f(self:unwrap())
+			else
+				return v
+			end
+		end
+
+	## end
+
+	## if has_T and has_E then
+
+		function resultT.map_or_else(self: resultT, fd: functor(auto, E), f: functor(auto, T))
+			## local U = fd.type.rettypes[1]
+			## concept_assert( functor_concept(U, T), f )
+
+			if self:is_ok() then
+				return f(self:unwrap())
+			else
+				return fd(self:unwrap_err())
+			end
+		end
+
+		function resultT.map_err(self: resultT, f: functor(auto, E))
+			local F = #[f.type.rettypes[1]]#
+			if self:is_ok() then
+				return (@result(T, F)).ok(self:unwrap())
+			else
+				return (@result(T, F)).err(f(self:unwrap_err()))
+			end
+		end	
+
+	## end
 
 	function resultT.and_(self: resultT, res: resultT): resultT
 		if self:is_ok() then
@@ -99,26 +156,190 @@ require 'plib/meta/concepts'
 		end
 	end
 
-	function resultT.and_then(self: resutlT, f: functor(auto, T))
-		##[[
-			static_assert(f.type.rettypes[1].is_result, "'f' doesn't return an " ..
-				"result (want: function(" .. tostring(T) .. "): result(U, E), " .. 
-				"has: " .. tostring(f.type) .. ").")
-			static_assert(f.type.rettypes[1].errtype == E, "'f' doesn't return an " ..
-				"option with the right error type (want error type: " .. tostring(E) ..
-				", has: " .. tostring(f.type.rettypes[1].errtype ))
-		]]
-		local U = #[f.type.rettypes[1]]#
-		if self:is_ok() then
-			return f(self:unwrap())
-		else
-			return (@result(U, E)).err(self:unwrap_err())
-		end
-	end
+	## if has_T and has_E then
 
-	function resultT.or_(self: resultT, res: auto)
+		function resultT.and_then(self: resultT, f: functor(auto, T))
+			local U = #[
+				concept_assert(
+					functor_concept(result_concept(auto, E), T), f
+				).rettypes[1].subtype
+			]#
+			local U = #[f.type.rettypes[1]]#
+			if self:is_ok() then
+				return f(self:unwrap())
+			else
+				return (@result(U, E)).err(self:unwrap_err())
+			end
+		end
+
+	## end
+
+	## if has_T then
+
+		function resultT.or_(self: resultT, res: auto)
+			local F = #[
+				concept_assert(
+					result_concept(T, auto), res.type
+				).errtype
+			]#
+
+			if self:is_ok() then
+				return (@result(T, F)).ok(self:unwrap())
+			else
+				return res
+			end
+		end
+
+	## end
+
+	## if has_T and has_E then
+
+		function resultT.or_else(self: resultT, f: functor(auto, E))
+			local F = #[
+				concept_assert(
+					functor_concept(result_concept(T, auto), E)
+				).rettypes[1].errtype
+			]#
+
+			if self:is_ok() then
+				return (@result(T, F)).ok(self:unwrap())
+			else
+				return f(self:unwrap_err())
+			end
+		end
+
+	## end
+
+
+	##[[
+
+	local convert_concept = concept(function(t)
+		if t.type.is_result then
+
+			if t.type.subtype == primtypes.niltype then
+				return E:is_convertible_from_type(t.type.errtype)
+			elseif t.type.errtype == primtypes.niltype then
+				return T:is_convertible_from_type(t.type.subtype)
+			else
+				local ok, err = T:is_convertible_from_type(t.type.subtype)
+				if not ok then return false, err end
+
+				ok, err = E:is_convertible_from_type(t.type.errtype)
+				if not ok then return false, err end
+			end
+
+		end
+
+		return T:is_convertible_from_type(t.type)
+	end)
+
+	]]
+
+	function resultT.__convert(n: #[convert_concept]#)
+		## if n.type.is_result then
+			## if n.type.subtype == primtypes.niltype then
+				return resultT.err(n:unwrap_err())
+			## elseif n.type.errtype == primtypes.niltype then
+				return resultT.ok(n:unwrap())
+			## else
+				if n:is_ok() then
+					return resultT.ok(n:unwrap())
+				else
+					return resultT.err(n:unwrap_err())
+				end
+			## end
+		## else
+			return resultT.ok(n)
+		## end
 	end
 
 
 	## return resultT
 ## end)
+
+
+global result = #[make_result]#
+
+global function Ok(v: auto)
+	local T = #[v.type]#
+	return (@result(T, niltype)).ok(v)
+end
+
+global function Err(v: auto)
+	local E = #[v.type]#
+	return (@result(niltype, E)).err(v)
+end
+
+
+
+## if TEST then
+
+	## begin_test_suite 'plib/core/result'
+
+		local x: result(integer, integer) = Ok(24_i)
+		local y: result(integer, integer) = Err(1_i)
+
+		## begin_test 'is_ok/is_err'
+
+			passert(x:is_ok())
+			passert(y:is_err())
+
+		## begin_test 'as_ptr'
+
+			local xptr = x:as_ptr()
+			local yptr = y:as_ptr()
+
+			passert(xptr:is_ok())
+			passert(yptr:is_err())
+
+			$(xptr:unwrap()) = 42
+			$(yptr:unwrap_err()) = 0
+
+			passert(x:unwrap() == 42)
+			passert(y:unwrap_err() == 0)
+
+		## begin_test 'unwrap_or'
+
+			passert(x:unwrap_or(12) == 42)
+			passert(y:unwrap_or(12) == 12)
+
+		## begin_test 'unwrap_or_else'
+
+			local function f0(v: integer): integer
+				return v + 10
+			end
+
+			assert(x:unwrap_or_else(f0) == 42)
+			assert(y:unwrap_or_else(f0) == 10)
+
+		## begin_test 'map'
+
+			local function f1(v: integer): number
+				return (@number)(v * 2)
+			end
+
+			assert(x:map(f1):unwrap() == 84_n)
+			assert(y:map(f1):unwrap_err() == 0_i)
+
+		## begin_test 'map_or'
+
+			assert(x:map_or(24_n, f1) == 84_n)
+			assert(y:map_or(24_n, f1) == 24_n)
+
+		## begin_test 'map_or_else'
+
+			local function f2(v: integer): number
+				return 100_n - v
+			end
+
+			assert(x:map_or_else(f2, f1) == 84_n)
+			assert(y:map_or_else(f2, f1) == 100_n)
+
+		## begin_test 'map_err'
+
+			assert(x:map_err(f1):is_ok())
+			assert(x:map_err(f1):unwrap() == 42_i)
+			assert(y:map_err(f2):is_err())
+			assert(y:map_err(f2):unwrap_err() == 100_n)
+
+## end

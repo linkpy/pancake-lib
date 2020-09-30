@@ -1,6 +1,4 @@
 
-## local metafields = require 'plib/meta/metafields'
-
 require 'plib/meta/concepts'
 require 'plib/meta/ast'
 require 'plib/meta/asserts'
@@ -57,8 +55,13 @@ end))
 
 	## if T ~= primtypes.niltype then
 
-		## metafields.rename_method(optionT.value, 'unwrap_some', 'unwrap')
-		## metafields.rename_method(optionT.value, 'unwrap_some_ptr', 'unwrap_ptr')
+		function optionT.unwrap(self: optionT): T <inline>
+			return self:unwrap_some()
+		end
+
+		function optionT.unwrap_ptr(self: *optionT): *T <inline>
+			return self:unwrap_some_ptr()
+		end
 
 
 		function optionT.as_ptr(self: *optionT) <polymorphic>
@@ -121,7 +124,6 @@ end))
 
 		function optionT.and_(self: optionT, o: auto)
 			local U = #[type_assert( option_concept(primtypes.auto), o ).subtype]#
-			## print("and_", U)
 
 			if self:is_some() then
 				return o
@@ -136,7 +138,6 @@ end))
 					functor_concept(option_concept(primtypes.auto), T), f
 				).rettypes[1].subtype
 			]#
-			## print("and_then", U)
 
 			if self:is_some() then
 				return f(self:unwrap())
@@ -269,13 +270,25 @@ end
 
 	## begin_test_suite 'plib/core/option'
 
-		local x: option(integer) = Some(42_i)
+		local x: option(integer) = Some(24_i)
 		local y: option(integer) = None()
 
 		## begin_test 'is_some/is_none'
 
 			passert(x:is_some())
 			passert(y:is_none())
+
+		## begin_test 'as_ptr'
+
+			local xptr = x:as_ptr()
+			local yptr = y:as_ptr()
+
+			passert(xptr:is_some())
+			passert(yptr:is_none())
+
+			$(xptr:unwrap()) = 42
+
+			passert(x:unwrap() == 42)
 
 		## begin_test 'expect'
 
@@ -334,9 +347,7 @@ end
 
 		## begin_test 'and_'
 
-			local t: option(integer) = x:and_(y)
-
-			passert(t:is_none())
+			passert(x:and_(y):is_none())
 
 		## begin_test 'and_then'
 
@@ -400,6 +411,5 @@ end
 			local x: option(integer) = 10_u
 
 			passert(x:is_some() and x:unwrap() == 10_i)
-
 
 ## end

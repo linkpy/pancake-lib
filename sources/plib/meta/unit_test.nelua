@@ -14,7 +14,7 @@
 
 	]]
 
-	global function passert(cond: boolean, dummy: #[passert_dummy_concept]#)
+	global function passert(cond: boolean, dummy: #[passert_dummy_concept]#) <polymorphic, inline>
 		if not cond then
 			error(#[dummy.type.text]#)
 		end
