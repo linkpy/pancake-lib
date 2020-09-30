@@ -7,8 +7,6 @@ require 'plib/core/sumtype'
 
 
 ## if TEST then
-	## require('plib.meta.unit_test')(_ENV)
-
 	require 'io'
 	require 'plib/meta/unit_test'
 ## end
@@ -17,7 +15,7 @@ require 'plib/core/sumtype'
 
 ##[[
 
-option_concept = generic(memoize(function(T) 
+option_concept = generic(function(T) 
 	return concept(function(attr)
 		if not attr.type.is_option then
 			return false, 
@@ -33,7 +31,7 @@ option_concept = generic(memoize(function(T)
 
 		return true
 	end)
-end))
+end)
 
 ]]
 

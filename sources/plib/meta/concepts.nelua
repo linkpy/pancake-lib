@@ -54,8 +54,8 @@ local function make_functorN(R, Args)
 	end)
 end
 
-functor_concept = generic(memoize(function(R, ...) return make_functorN({R}, {...}) end))
-functor2_concept = generic(memoize(function(R1, R2, ...) return make_functorN({R1, R2}, {...}) end))
+functor_concept = generic(function(R, ...) return make_functorN({R}, {...}) end)
+functor2_concept = generic(function(R1, R2, ...) return make_functorN({R1, R2}, {...}) end)
 
 ]]
 
@@ -72,7 +72,7 @@ global functor2 = #[functor2_concept]#
 --]============================================================================]
 
 ##[[
-local make_action = generic(memoize(function(...)
+local make_action = generic(function(...)
 	local Args = {...}
 
 	return concept(function(attr)
@@ -102,7 +102,7 @@ local make_action = generic(memoize(function(...)
 
 		return true
 	end)
-end))
+end)
 
 action_concept = make_action
 ]]

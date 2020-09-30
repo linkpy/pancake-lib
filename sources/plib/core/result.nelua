@@ -13,9 +13,9 @@ require 'plib/meta/asserts'
 
 ##[[
 
-result_concept = generic(memoize(function(T, E)
+result_concept = generic(function(T, E)
 	return concept(function(attr)
-		if not attr.is_result then
+		if not attr.type.is_result then
 			return false,
 				string.format("the type isn't a result (got: %s)", attr.type)
 		end
@@ -36,7 +36,7 @@ result_concept = generic(memoize(function(T, E)
 
 		return true
 	end)
-end))
+end)
 
 ]]
 
@@ -148,11 +148,16 @@ end))
 
 	## end
 
-	function resultT.and_(self: resultT, res: resultT): resultT
+	function resultT.and_(self: resultT, res: auto)
+		local U = #[
+			concept_assert(
+				result_concept(primtypes.auto, E), res
+			).subtype
+		]#
 		if self:is_ok() then
 			return res
 		else
-			return self
+			return (@result(U, E)).err(self:unwrap_err())
 		end
 	end
 
@@ -161,7 +166,7 @@ end))
 		function resultT.and_then(self: resultT, f: functor(auto, T))
 			local U = #[
 				concept_assert(
-					functor_concept(result_concept(auto, E), T), f
+					functor_concept(result_concept(primtypes.auto, E), T), f
 				).rettypes[1].subtype
 			]#
 			local U = #[f.type.rettypes[1]]#
@@ -179,7 +184,7 @@ end))
 		function resultT.or_(self: resultT, res: auto)
 			local F = #[
 				concept_assert(
-					result_concept(T, auto), res.type
+					result_concept(T, primtypes.auto), res
 				).errtype
 			]#
 
@@ -197,7 +202,7 @@ end))
 		function resultT.or_else(self: resultT, f: functor(auto, E))
 			local F = #[
 				concept_assert(
-					functor_concept(result_concept(T, auto), E)
+					functor_concept(result_concept(T, primtypes.auto), E), f
 				).rettypes[1].errtype
 			]#
 
@@ -309,8 +314,8 @@ end
 				return v + 10
 			end
 
-			assert(x:unwrap_or_else(f0) == 42)
-			assert(y:unwrap_or_else(f0) == 10)
+			passert(x:unwrap_or_else(f0) == 42)
+			passert(y:unwrap_or_else(f0) == 10)
 
 		## begin_test 'map'
 
@@ -318,13 +323,13 @@ end
 				return (@number)(v * 2)
 			end
 
-			assert(x:map(f1):unwrap() == 84_n)
-			assert(y:map(f1):unwrap_err() == 0_i)
+			passert(x:map(f1):unwrap() == 84_n)
+			passert(y:map(f1):unwrap_err() == 0_i)
 
 		## begin_test 'map_or'
 
-			assert(x:map_or(24_n, f1) == 84_n)
-			assert(y:map_or(24_n, f1) == 24_n)
+			passert(x:map_or(24_n, f1) == 84_n)
+			passert(y:map_or(24_n, f1) == 24_n)
 
 		## begin_test 'map_or_else'
 
@@ -332,14 +337,32 @@ end
 				return 100_n - v
 			end
 
-			assert(x:map_or_else(f2, f1) == 84_n)
-			assert(y:map_or_else(f2, f1) == 100_n)
+			passert(x:map_or_else(f2, f1) == 84_n)
+			passert(y:map_or_else(f2, f1) == 100_n)
 
 		## begin_test 'map_err'
 
-			assert(x:map_err(f1):is_ok())
-			assert(x:map_err(f1):unwrap() == 42_i)
-			assert(y:map_err(f2):is_err())
-			assert(y:map_err(f2):unwrap_err() == 100_n)
+			passert(x:map_err(f1):is_ok())
+			passert(x:map_err(f1):unwrap() == 42_i)
+			passert(y:map_err(f2):is_err())
+			passert(y:map_err(f2):unwrap_err() == 100_n)
+
+		## begin_test 'and_'
+
+			passert(x:and_(y):is_err())
+			passert(x:and_(y):unwrap_err() == 0_i)
+
+		## begin_test 'and_then'
+
+			local function f3(v: integer): result(number, integer)
+				return Ok(v * 10)
+			end
+
+			passert(x:and_then(f3):unwrap() == 58_n)
+			passert(y:and_then(f3):unwrap_err() == 0_i)
+
+		## begin_test 'or_'
+
+		## begin_test 'or_else'
 
 ## end

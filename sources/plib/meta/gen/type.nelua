@@ -1,0 +1,135 @@
+
+##[[
+
+local tabler = require 'nelua.utils.tabler'
+
+typegen = {}
+
+
+local function largest_type_of(list)
+	local size = 0
+
+	for _, type in pairs(list) do
+		size = math.max(type.size, size)
+	end
+
+	return size
+end
+typegen.largest_type_of = largest_type_of
+
+
+local function enum_from_names(list, ptype)
+	local values = {}
+	local i = 0
+
+	for _, name in pairs(list) do
+		values[#values+1] = {
+			name = name,
+			value = i
+		}
+		i = i + 1
+	end
+
+	static_assert(#values > 0, "No names given to generate an enum.")
+
+	return types.EnumType(ptype or primtypes.integer, values)
+end
+typegen.enum_from_names = enum_from_names
+
+
+local function enum_from_keys(map, ptype)
+	local keys = {}
+
+	for key, _ in pairs(map) do
+		keys[#keys+1] = key
+	end
+
+	return enum_from_names(keys, ptype)
+end
+typegen.enum_from_keys = enum_from_keys
+
+
+local function enum_name_value(enum, name)
+	for k, entry in ipairs(enum.fields) do
+		if entry.name == name then
+			return entry.value
+		end
+	end
+
+	error("The given enum doesn't have a value named " .. name)
+end
+typegen.enum_name_value = enum_name_value
+
+
+local function pad_record(rec, min_size)
+	if rec.size >= min_size then
+		return rec
+	end
+
+	rec:add_field(
+		'__typegen__padding__DO_NOT_USE', 
+		types.ArrayType(primtypes.uint8, min_size - rec.size)
+	)
+
+	return rec
+end
+typegen.pad_record = pad_record
+
+
+--- {
+---		tag = [types.EnumType] (tag of the enum)
+---		data = [types.Type / array of field] (data inside of the record)
+---		encapsulate_data = [boolean] (if true, record/fields from data are added in a field named 'data')
+--- 	min_size = [int] (minimum size of the record)
+---     fields = [array of field] (additional fields)
+--- }
+local function record(desc)
+	static_assert(type(desc) == "table", "Only accepts table")
+	local rec = types.RecordType()
+
+	if desc.tag then
+		static_assert(traits.is_type(desc.tag) and desc.tag.is_enum, "desc.tag must be an enum.")
+		rec:add_field('tag', desc.tag)
+	end
+
+	if desc.data then
+		static_assert(type(desc.data) == "table", "desc.data must be a table")
+
+		if traits.is_type(desc.data) then
+			if desc.data.is_record and not desc.encapsulate_data then
+				tabler.insertvalues(rec.fields, desc.data.fields)
+			end
+
+			rec:add_field('data', desc.data)
+		else
+			tabler.insertvalues(rec.fields, desc.data)
+		end
+	end
+
+	if desc.fields then
+		tabler.insertvalues(rec.fields, desc.fields)
+	end
+
+	rec:update_fields()
+
+	if desc.min_size then
+		pad_record(rec, desc.min_size)
+	end
+
+	return rec
+end
+typegen.record = record
+
+
+local function fields_to_map(fields)
+	local map = {}
+
+	for _, field in ipairs(fields) do
+		map[field.name] = field.type
+	end
+
+	return map
+end
+typegen.fields_to_map = fields_to_map
+
+]]

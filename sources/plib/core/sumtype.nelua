@@ -1,207 +1,223 @@
 
 require 'plib/core/cll'
 
+require 'plib/meta/gen/type'
+require 'plib/meta/gen/ast'
 
-## local make_sumtype = generalize(function (nick, rec)
 
+
+## local make_sumtype = generalize(function(nick, rec)
 
 	##[[
-
-	local entries = {}
-
-	for _, field in ipairs(rec.fields) do
-		entries[field.name] = field.type
-	end
-
-
-
-	local function find_max_entry_size(entries)
-		local max_size = 0
-		for _, entry in pairs(entries) do
-			max_size = math.max(entry.size, max_size)
-		end
-		return max_size
-	end
-
-	local function make_tag_enum(entries)
-		local values = {}
-		local i = 0
-		for ename, entry in pairs(entries) do
-			table.insert(values, {
-				name = ename,
-				value = i
-			})
-			i = i + 1
-		end
-
-		static_assert(#values > 0, "A sumtype must have at least 1 variant.")
-
-		return types.EnumType(primtypes.integer, values)
-	end
-
-	local function find_enum_value(enumtype, name)
-		for _, value in ipairs(enumtype.fields) do
-			if value.name == name then
-				return value.value
-			end
-		end
-
-		static_assert(false, "The given enum doesn't have a value named " .. name)
-	end
-
-	local function make_record(fields, tagenum, size)
-		local recordtype = types.RecordType()
-		
-		recordtype:add_field('__tag', tagenum.subtype)
-
-		for _, field in ipairs(fields) do
-			recordtype:add_field(field.name, field.type)
-		end
-
-		
-		local rem_size = size - (recordtype.size - tagenum.subtype.size)
-
-		static_assert(rem_size >= 0, "The structure as a bigger size than wanted (too much fields given ?)")
-
-		if rem_size > 0 then
-			recordtype:add_field('__storage', types.ArrayType(primtypes.uint8, rem_size))
-		end
-
-		return recordtype
-	end
-
-	local function make_variant_record(entry, tagenum, size)
-		local fields = {}
-		if entry.is_record then
-			for _, field in ipairs(entry.fields) do
-				table.insert(fields, { name = field.name, type = field.type })
-			end
-		elseif entry.size > 0 then
-			table.insert(fields, { name = "data", type = entry })
-		end
-
-		return make_record(fields, tagenum, size)
-	end
-
-	local function make_record_copying(tag, inp, inptype)
-		local pairs = {}
-
-		table.insert(pairs, aster.Pair{ '__tag', aster.Number { 'dec', tostring(tag) } })
-
-		for _, field in ipairs(inptype.fields) do
-			table.insert(pairs, aster.Pair{ 
-				field.name, 
-				aster.DotIndex{
-					field.name,
-					aster.Id( { inp.name } )
-				}
-			})
-		end
-
-		return aster.Table{ pairs }
-	end
-
-	local size = find_max_entry_size(entries)
+	local entries = typegen.fields_to_map(rec.fields)
+	local size = typegen.largest_type_of(entries)
 	local variants = {}
-	local nickname = "sumtype(" .. nick .. ")"
-
+	local nickname = "sumtype(" .. nick .. ")"	
 	]]
 
-	local sumtypeT_tag <nickname #[nickname .. "#TAG"]#> = #[make_tag_enum(entries)]#
-	local sumtypeT <nickname #[nickname]#> = #[make_record({}, sumtypeT_tag.value, size)]#
+
+	local tagenum <nickname #[nickname .. "#TAG"]#> = #[
+		typegen.enum_from_keys(entries)
+	]#
+
+	## size = size + tagenum.value.size
+
+	local sumtypeT <nickname #[nickname]#> = #[
+		typegen.record{
+			tag = tagenum.value,
+			min_size = size
+		}
+	]#
 
 
+	--- #syrup#: follow "For each defined variant of the sumtype :"
 	## for name, entry in pairs(entries) do
-		## variants[name] = make_variant_record(entry, sumtypeT_tag.value, size)
-		## local variant = variants[name]
-		## local enumvalue = find_enum_value(sumtypeT_tag.value, name)
-		local variantT <nickname #[nickname .. "#" .. name]#> = #[variant]#
-		local entryT = #[entry]#
+		--- #syrup#: define "$name$" "Name of the variant."
+		##[[
+		local tag = typegen.enum_name_value(tagenum.value, name)
+		local variant = typegen.record{
+				tag = tagenum.value,
+				data = entry,
+				encapsulate_data = true,
+				min_size = size
+		}
+
+		variants[name] = variant
+		variant.nickname = nickname .. "#" .. name
+
+		local is_record = entry.is_record
+		local has_size = entry.size > 0
 
 
-		function sumtypeT.#|'is_' .. name|#(self: sumtypeT): boolean
-			return self.__tag == #[enumvalue]#
+		local is_name = "is_" .. name
+		local unwrap_name = "unwrap_" .. name
+		local unwrap_name_ptr = "unwrap_" .. name .. "_ptr"
+		local morph_into_name = "morph_into_" .. name
+		]]
+
+		local tag = #[tag]#
+		local entry = #[entry]#
+		local variant = #[variant]#
+
+
+		--[====================================================================[
+		--- Checks if the current instance is of a given variant. 
+		---
+		--- #syrup#: name "is_$name$"
+		--]====================================================================]
+		function sumtypeT.#|is_name|#(self: *sumtypeT): boolean
+			return self.tag == tag
+		end
+
+		--[====================================================================[
+		--- Modifies the current instance to be of a given variant
+		---
+		--- \param value : The data of the variant.
+		---
+		--- #syrup#: name "morph_into_$name$"
+		--]====================================================================]
+		function sumtypeT.#|morph_into_name|#(self: *sumtypeT, value: entry): *sumtypeT
+			local variant_self = (@*variant)(self)
+
+			variant_self.tag = tag
+
+			## if has_size then
+				variant_self.data = value
+			## end
+
+			return self
 		end
 
 
-		## if entry.is_record then
-			## if DEBUG_META then print("record variant:", variant, variant.size) end
+		-- #syrup#: follow "If the variant's data has a size :"
+		## if has_size then
 
-			function sumtypeT.#|name|#(v: entryT): sumtypeT
-				return union_cast(sumtypeT, (@variantT)(#[make_record_copying(enumvalue, v, entry)]#))
+			--[================================================================[
+			--- Gets the data of the current instance.
+			---
+			--- \panic if the current instance is not of the given variant.
+			--- 
+			--- #syrup#: name "unwrap_$name$"
+			--]================================================================]
+			function sumtypeT.#|unwrap_name|#(self: sumtypeT): entry
+				assert(self:#|is_name|#(), "unwrap failed : sumtype is not of the right variant.")
+				
+				return union_cast(variant, self).data
 			end
 
-			function sumtypeT.#|'unwrap_' .. name|#(self: sumtypeT): entryT
-				assert(self:#|'is_' .. name|#(), "Unwrap failed : sumtype is not of the right variant")
-				local v = union_cast(variantT, self)
-				local r: entryT <noinit>
-				## for _, field in ipairs(entry.fields) do
-					r.#|field.name|# = v.#|field.name|#
-				## end
-				return r
-			end
+			--[================================================================[
+			--- Gets a pointer to the data of the current instance.
+			---
+			--- #syrup#: name "unwrap_$name$_ptr"
+			--]================================================================]
+			function sumtypeT.#|unwrap_name_ptr|#(self: *sumtypeT): *entry
+				assert(self:#|is_name|#(), "unwrap ptr failed : sumtype is not of the right variant.")
 
-			function sumtypeT:#|'unwrap_' .. name .. "_ptr"|#(): *entryT
-				assert(self:#|'is_' .. name|#(), "Unwrap pointer failed : sumtype is not of the right variant")
-				return (@*entryT)((@usize)(self) + #[sumtypeT_tag.value.subtype.size]#)
-			end
+				local variant_self = (@*variant)(self)
 
-			function sumtypeT:#|'morph_into_' .. name|#(v: entryT): *sumtypeT
-				local ptr = (@*variantT)(self)
-				ptr.__tag = #[enumvalue]#
-				## for _, field in ipairs(entry.fields) do
-					ptr.#|field.name|# = v.#|field.name|#
-				## end
-				return self
-			end
-
-		## elseif entry.size > 0 then
-			## if DEBUG_META then print("value variant:", variant, variant.size) end
-
-			function sumtypeT.#|name|#(v: entryT): sumtypeT
-				return union_cast(sumtypeT, (@variantT)({
-					__tag = #[enumvalue]#,
-					data = v
-				}))
-			end
-
-			function sumtypeT.#|'unwrap_' .. name|#(self: sumtypeT): entryT
-				assert(self:#|'is_' .. name|#(), "Unwrap failed : sumtype is not of the right variant")
-				return union_cast(variantT, self).data
-			end
-
-			function sumtypeT:#|'unwrap_' .. name .. '_ptr'|#(): *entryT
-				assert(self:#|'is_' .. name|#(), "Unwrap pointer failed : sumtype is not of the right variant")
-				local ptr = (@*variantT)(self)
-				return &ptr.data
-			end
-
-			function sumtypeT:#|'morph_into_' .. name|#(v: entryT): *sumtypeT
-				local ptr = (@*variantT)(self)
-				ptr.__tag = #[enumvalue]#
-				ptr.data = v
-				return self
-			end
-
-		## else
-			## if DEBUG_META then print("empty variant:", variant, variant.size) end
-
-			function sumtypeT.#|name|#(): sumtypeT
-				return union_cast(sumtypeT, (@variantT)({
-					__tag = #[enumvalue]#
-				}))
-			end
-
-			function sumtypeT:#|'morph_into_' .. name|#(): *sumtypeT
-				self.__tag = #[enumvalue]#
-				return self
+				return &variant_self.data
 			end
 
 		## end
 
-	## end	
 
+		--[====================================================================[
+		--- Creates a new instance of the given variant.
+		---
+		--- \param value : The data for the instance.
+		---
+		--- #syrup#: name "$name$"
+		--]====================================================================]
+		function sumtypeT.#|name|#(value: entry): sumtypeT
+			local self: sumtypeT <noinit>
+			self:#|morph_into_name|#(value)
+			return self
+		end
+
+	## end
 	## return sumtypeT
 ## end)
 
+
+--[============================================================================[
+--- 
+--]============================================================================]
 global sumtype = #[make_sumtype]#
+
+
+
+
+## if TEST then
+	require 'io'
+	require 'plib/meta/unit_test'
+
+
+	## begin_test_suite 'plib/core/sumtype'
+
+		local test_record = @record {
+			a: integer,
+			b: number
+		}
+
+		local test_type = @sumtype('test_type', record {
+			rec: test_record,
+			irec: record {
+				a: uint8,
+				b: integer
+			},
+			val: integer,
+			empty: niltype
+		})
+
+		local x = test_type.rec({ a = 10, b = 20 })
+		local y = test_type.irec({ a = 1, b = 2})
+		local z = test_type.val(3)
+		local w = test_type.empty()
+
+		## begin_test 'is_#|name|#'
+
+			passert(x:is_rec())
+			passert(y:is_irec())
+			passert(z:is_val())
+			passert(w:is_empty())
+
+			passert(not y:is_rec())
+			passert(not z:is_irec())
+			passert(not w:is_val())
+			passert(not x:is_empty())
+
+		## begin_test 'unwrap_#|name|#'
+
+			passert(x:unwrap_rec().a == 10)
+			passert(y:unwrap_irec().b == 2)
+			passert(z:unwrap_val() == 3)
+			## static_assert(not test_type.value.metafields.unwrap_empty)
+
+		## begin_test 'unwrap_#|name|#_ptr'
+
+			passert(x:unwrap_rec_ptr().b == 20)
+			passert(y:unwrap_irec_ptr().a == 1)
+			passert($z:unwrap_val_ptr() == 3)
+			## static_assert(not test_type.value.metafields.unwrap_empty_ptr)
+
+			x:unwrap_rec_ptr().b = 22
+			y:unwrap_irec_ptr().a = 11
+			$z:unwrap_val_ptr() = 33
+
+			passert(x:unwrap_rec_ptr().b == 22)
+			passert(y:unwrap_irec_ptr().a == 11)
+			passert($z:unwrap_val_ptr() == 33)
+
+		## begin_test 'morph_into_#|name|#'
+
+			x:morph_into_irec({a = 100, b = 200})
+			y:morph_into_val(300)
+			z:morph_into_empty()
+			w:morph_into_rec({a = 222, b = 111})
+
+			passert(w:is_rec())
+			passert(x:is_irec())
+			passert(y:is_val())
+			passert(z:is_empty())
+
+## end

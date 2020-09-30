@@ -1,0 +1,99 @@
+
+##[[
+
+local stringer = require 'nelua.utils.stringer'
+
+astgen = {}
+
+
+local function local_bind(n, v)
+	inject_astnode(
+		aster.VarDecl {
+			"local",
+			{aster.IdDecl{n, nil, nil}},
+			{aster.PreprocessExpr{n}}
+		}
+	)
+	return v
+end
+astgen.local_bind = local_bind
+
+
+local function local_binder(f)
+	return function(n, ...)
+		return local_bind(n, f(...))
+	end
+end
+astgen.local_binder = local_binder
+
+
+local function record_copy_table(var, overwrite, exclude)
+	overwrite = overwrite or {}
+	exclude = exclude or {}
+
+	local function _recursive(type, accessor, ovr, exc)
+		if type.is_record then
+			local pairs = {}
+
+			for _, field in ipairs(type.fields) do
+				local v = ovr[field.name] or aster.DotIndex{field.name, accessor}
+
+				if not exc[field.name] and not stringer.endswith(field.name, "__DO_NOT_USE") then
+					pairs[#pairs+1] = aster.Pair{	
+						field.name,
+						_recursive(
+							field.type, v, 
+							ovr[field.name] or {}, exc[field.name] or {})
+					}
+				end
+			end
+
+			return aster.Table{pairs}
+		else
+			if ovr then
+				return ovr
+			end
+
+			return accessor
+		end
+	end
+
+	return _recursive(var.type, aster.Id{ var.name }, overwrite, exclude)
+end
+astgen.record_copy_table = record_copy_table
+
+
+local function record_copy_var(dst, src, type, overwrite, exclude)
+	overwrite = overwrite or {}
+	exclude = exclude or {}
+
+	local statements = {}
+
+	for _, field in ipairs(type.fields) do
+		if not exclude[field.name] and not stringer.endswith(field.name, "__DO_NOT_USE") then
+			local v
+
+			if overwrite[field.name] then
+				v = overwrite[field.name]
+			else
+				v = aster.DotIndex{
+					field.name,
+					src
+				}
+			end
+
+			statements[#statements+1] = aster.Assign{
+				aster.DotIndex{
+					field.name,
+					dst
+				},
+				v
+			}
+		end
+	end
+
+	return aster.Block{statements}
+end
+astgen.record_copy_var = record_copy_var
+
+]]
