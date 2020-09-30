@@ -1,5 +1,5 @@
 
-require 'plib/meta/astgen'
+require 'plib/meta/gen/ast'
 
 
 --[============================================================================[
@@ -49,7 +49,7 @@ function concept_assert(c, o)
 	return r
 end
 
-concept_assert_bind = local_binder(concept_assert)
+concept_assert_bind = astgen.local_binder(concept_assert)
 ]]
 
 
@@ -69,7 +69,7 @@ function type_assert(t, o)
 	return r
 end
 
-type_assert_bind = local_binder(type_assert_bind)
+type_assert_bind = astgen.local_binder(type_assert_bind)
 ]]
 
 

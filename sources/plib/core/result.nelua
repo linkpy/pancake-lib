@@ -5,11 +5,6 @@ require 'plib/meta/concepts'
 require 'plib/meta/asserts'
 
 
-## if TEST then
-	## require('plib.meta.unit_test')(_ENV)
-	require 'io'
-## end
-
 
 ##[[
 
@@ -169,7 +164,6 @@ end)
 					functor_concept(result_concept(primtypes.auto, E), T), f
 				).rettypes[1].subtype
 			]#
-			local U = #[f.type.rettypes[1]]#
 			if self:is_ok() then
 				return f(self:unwrap())
 			else
@@ -279,6 +273,8 @@ end
 
 ## if TEST then
 
+	require 'plib/meta/unit_test'
+
 	## begin_test_suite 'plib/core/result'
 
 		local x: result(integer, integer) = Ok(24_i)
@@ -358,11 +354,21 @@ end
 				return Ok(v * 10)
 			end
 
-			passert(x:and_then(f3):unwrap() == 58_n)
+			passert(x:and_then(f3):unwrap() == 420_n)
 			passert(y:and_then(f3):unwrap_err() == 0_i)
 
 		## begin_test 'or_'
 
+			passert(x:or_(y):is_ok())
+			passert(x:or_(y):unwrap() == 42_i)
+
 		## begin_test 'or_else'
+
+			local function f4(v: integer): result(integer, number)
+				return Ok(v + 10)
+			end
+
+			passert(x:or_else(f4):unwrap() == 42_i)
+			passert(y:or_else(f4):unwrap() == 10_i)
 
 ## end

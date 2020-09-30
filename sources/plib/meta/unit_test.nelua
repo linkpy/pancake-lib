@@ -4,6 +4,8 @@
 	##[[ 
 	local cols = require('nelua.utils.console').colors
 
+
+
 	local suite_col = cols.blue .. cols.bright
 	local pipe_col = cols.white .. cols.dim
 	local test_col = cols.green .. cols.bright
@@ -12,28 +14,11 @@
 	local test_name = ""
 	local suite_count = 0
 
-	local function inject_io_write(content)
+	local function inject_print(content)
 		inject_astnode(
-			aster.CallMethod{
-				"write",
+			aster.Call{
 				{aster.String{content}},
-				aster.DotIndex{
-					"stdout",
-					aster.Id{ "io" }
-				}
-			}
-		)
-	end
-
-	local function inject_io_flush()
-		inject_astnode(
-			aster.CallMethod{
-				"flush",
-				{},
-				aster.DotIndex{
-					"stdout",
-					aster.Id{ "io" }
-				}
+				aster.Id{ "print" }
 			}
 		)
 	end
@@ -51,21 +36,21 @@
 
 		local mark = ' '
 
-		if suite_count == 1 then mark = "-" end
+		if suite_count == 1 then mark = "#" end
 
-		inject_io_write(pipe_col .. mark .. cols.reset .. suite_col .. suite_name .. pipe_col .. '\t' .. test_col .. name .. cols.reset .. '\n')
-		inject_io_flush()
+		local line = pipe_col .. mark .. cols.reset .. suite_col .. suite_name .. pipe_col .. '\t' .. test_col .. name .. cols.reset 
+
+		inject_print(line)
 	end
-
 
 
 	local passert_dummy_concept = concept(function(x)
 		local t = types.NiltypeType('niltype')
 		t.is_equal = function() return false end
-		t.text = cols.red .. "x=== FAIL ===x" .. cols.reset
+		t.text = cols.red .. "x=== FAIL ===x" .. cols.reset .. "\n"
+		t.text = t.text .. context:get_parent_node():format_message("error", "assertion failed")
 		return t
 	end)
-
 	]]
 
 	global function passert(cond: boolean, dummy: #[passert_dummy_concept]#) <polymorphic, inline>

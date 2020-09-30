@@ -65,7 +65,7 @@ require 'plib/meta/gen/ast'
 		---
 		--- #syrup#: name "is_$name$"
 		--]====================================================================]
-		function sumtypeT.#|is_name|#(self: *sumtypeT): boolean
+		function sumtypeT.#|is_name|#(self: sumtypeT): boolean
 			return self.tag == tag
 		end
 
@@ -113,9 +113,7 @@ require 'plib/meta/gen/ast'
 			function sumtypeT.#|unwrap_name_ptr|#(self: *sumtypeT): *entry
 				assert(self:#|is_name|#(), "unwrap ptr failed : sumtype is not of the right variant.")
 
-				local variant_self = (@*variant)(self)
-
-				return &variant_self.data
+				return &(@*variant)(self).data
 			end
 
 		## end
@@ -148,7 +146,7 @@ global sumtype = #[make_sumtype]#
 
 
 ## if TEST then
-	require 'io'
+	
 	require 'plib/meta/unit_test'
 
 

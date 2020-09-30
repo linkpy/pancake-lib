@@ -1,15 +1,9 @@
 
 require 'plib/meta/concepts'
-require 'plib/meta/ast'
 require 'plib/meta/asserts'
+require 'plib/meta/gen/ast'
 require 'plib/core/sumtype'
 
-
-
-## if TEST then
-	require 'io'
-	require 'plib/meta/unit_test'
-## end
 
 
 
@@ -265,6 +259,8 @@ end
 
 
 ## if TEST then
+
+	require 'plib/meta/unit_test'
 
 	## begin_test_suite 'plib/core/option'
 
